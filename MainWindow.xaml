@@ -1,0 +1,244 @@
+<Window
+    x:Class="CopyFinder.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:CopyFinder.ViewModels"
+    Title="Technification CopyFinder">
+
+    <Grid Padding="14" RowSpacing="10" Background="{StaticResource AppBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource HeaderBackgroundBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,0,1" Padding="12">
+            <Grid ColumnSpacing="11">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Image x:Name="AppLogoImage" Width="260" Height="70" Stretch="Uniform" Source="ms-appx:///Technification/Logo/logo-Master.png"/>
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="CopyFinder" FontSize="28" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="2.0.3" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource AppPrimaryBrush}"/>
+                    </StackPanel>
+                    <TextBlock Text="Find duplicate files, review, and delete selected duplicates." Foreground="{StaticResource AppPrimaryBrush}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="{StaticResource PanelBackgroundBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Padding="8">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="500"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="FolderPathBox" PlaceholderText="Choose or type a folder to scan" Background="{StaticResource SearchInputBackgroundBrush}" Foreground="{StaticResource SearchInputTextBrush}" BorderBrush="{StaticResource SearchInputBorderBrush}"/>
+                <Button Grid.Column="1" x:Name="BrowseButton" Content="Browse" Click="BrowseButton_Click" Style="{StaticResource TopButtonStyle}"/>
+                <Button Grid.Column="2" x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" Style="{StaticResource TopScanButtonStyle}"/>
+                <Button Grid.Column="3" x:Name="CancelButton" Content="Cancel" Click="CancelButton_Click" IsEnabled="False" Style="{StaticResource TopButtonStyle}"/>
+            </Grid>
+        </Border>
+
+        <Expander Grid.Row="2" x:Name="SettingsPanel" IsExpanded="False" MinHeight="40" RequestedTheme="Dark" Background="{StaticResource PanelBackgroundBrush}" BorderBrush="{StaticResource PanelBorderBrush}">
+            <Expander.Header>
+                <TextBlock Text="Scan Settings" Foreground="{StaticResource AppPrimaryBrush}" FontWeight="SemiBold"/>
+            </Expander.Header>
+            <Grid Padding="0,6,0,0" RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Keep" Width="52" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <ComboBox x:Name="KeepRuleComboBox" SelectionChanged="KeepRuleComboBox_SelectionChanged" SelectedIndex="0" Width="190" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}">
+                        <ComboBoxItem Content="Original"/>
+                        <ComboBoxItem Content="Prefer shortest name"/>
+                        <ComboBoxItem Content="Prefer oldest file"/>
+                        <ComboBoxItem Content="Prefer newest file"/>
+                        <ComboBoxItem Content="Prefer folder"/>
+                        <ComboBoxItem Content="Prefer highest resolution"/>
+                    </ComboBox>
+                    <TextBlock Text="Folder" Width="52" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <TextBox x:Name="PreferredFolderBox" Width="420" PlaceholderText="Used only by Prefer folder" TextChanged="Setting_Changed" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}"/>
+                    <TextBlock Text="Workers" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <NumberBox x:Name="HashWorkersBox" Width="78" Minimum="1" Maximum="16" SmallChange="1" LargeChange="2" ValueChanged="ScanLimitBox_ValueChanged" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Stop at" Width="52" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <NumberBox x:Name="ScanLimitBox" Width="100" Minimum="1" Maximum="10000" SmallChange="50" LargeChange="500" ValueChanged="ScanLimitBox_ValueChanged" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}"/>
+                    <TextBlock Text="Min KB" Width="52" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <NumberBox x:Name="MinimumSizeBox" Width="110" Minimum="0" SmallChange="100" LargeChange="1024" ValueChanged="ScanLimitBox_ValueChanged" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}"/>
+                    <TextBlock Text="Skip ext" Width="58" VerticalAlignment="Center" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <TextBox x:Name="ExcludedExtensionsBox" Width="240" PlaceholderText="tmp, bak, log" TextChanged="Setting_Changed" Background="{StaticResource InputBackgroundBrush}" Foreground="White" BorderBrush="{StaticResource InputBorderBrush}"/>
+                    <CheckBox x:Name="SkipHiddenCheckBox" Content="Skip hidden files" Checked="Setting_Changed" Unchecked="Setting_Changed" Foreground="{StaticResource AppTextLightBrush}"/>
+                    <CheckBox x:Name="SkipSystemCheckBox" Content="Skip system files" Checked="Setting_Changed" Unchecked="Setting_Changed" Foreground="{StaticResource AppTextLightBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Expander>
+
+        <Grid Grid.Row="3" ColumnSpacing="7">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <ProgressBar x:Name="ScanProgressBar" IsIndeterminate="False" Minimum="0" Maximum="100"/>
+            <TextBlock Grid.Column="1" x:Name="SummaryText" Text="No scan run yet." VerticalAlignment="Center" Foreground="{StaticResource AppTextSecondaryBrush}" FontWeight="Medium"/>
+        </Grid>
+
+        <Border Grid.Row="4" BorderBrush="{StaticResource AppBorderBrush}" Background="{StaticResource AppSurfaceBrush}" BorderThickness="1" CornerRadius="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Background="{StaticResource TableHeaderBrush}" BorderBrush="{StaticResource TableHeaderBorderBrush}" BorderThickness="0,0,0,1">
+                    <Grid Padding="8,6" ColumnSpacing="7" HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="130"/>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="118"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="2" Text="Actions" FontWeight="SemiBold" Foreground="{StaticResource TableHeaderTextBrush}"/>
+                        <TextBlock Grid.Column="3" Text="File Name" FontWeight="SemiBold" Foreground="{StaticResource TableHeaderTextBrush}"/>
+                        <TextBlock Grid.Column="4" Text="Size" FontWeight="SemiBold" Foreground="{StaticResource TableHeaderTextBrush}"/>
+                        <TextBlock Grid.Column="5" Text="Modified" FontWeight="SemiBold" Foreground="{StaticResource TableHeaderTextBrush}"/>
+                        <TextBlock Grid.Column="6" Text="Path" FontWeight="SemiBold" Foreground="{StaticResource TableHeaderTextBrush}"/>
+                    </Grid>
+                </Border>
+
+                <ListView
+                Grid.Row="1"
+                x:Name="DuplicateGroupList"
+                ItemsSource="{x:Bind DuplicateGroups, Mode=OneWay}"
+                SelectionMode="None"
+                IsItemClickEnabled="False"
+                Padding="0"
+                BorderThickness="0"
+                Background="Transparent"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DuplicateGroupViewModel">
+                        <Expander IsExpanded="True" RequestedTheme="Dark" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="0" Margin="0">
+                            <Expander.Header>
+                                <Border Background="{StaticResource GroupHeaderBrush}" BorderBrush="{StaticResource GroupHeaderBorderBrush}" BorderThickness="0,0,0,1">
+                                    <Grid ColumnSpacing="7" Padding="8,4" HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="92"/>
+                                            <ColumnDefinition Width="154"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{x:Bind HeaderText, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource GroupHeaderTextBrush}"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                            <Button Content="Select" Tag="{x:Bind GroupId}" Click="SelectGroupButton_Click" Style="{StaticResource ReviewButtonStyle}"/>
+                                            <Button Content="Deselect" Tag="{x:Bind GroupId}" Click="DeselectGroupButton_Click" Style="{StaticResource ReviewButtonStyle}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{x:Bind ConfidenceText}" Foreground="{StaticResource GroupHeaderTextBrush}"/>
+                                    </Grid>
+                                </Border>
+                            </Expander.Header>
+
+                            <StackPanel Spacing="0" HorizontalAlignment="Stretch">
+                                <ItemsControl ItemsSource="{x:Bind Files}" HorizontalAlignment="Stretch">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel HorizontalAlignment="Stretch"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:DuplicateFileViewModel">
+                                            <Grid Padding="8,6" ColumnSpacing="7" HorizontalAlignment="Stretch" Background="{x:Bind RowBackground, Mode=OneWay}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="36"/>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="130"/>
+                                                    <ColumnDefinition Width="220"/>
+                                                    <ColumnDefinition Width="70"/>
+                                                    <ColumnDefinition Width="118"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <CheckBox
+                                                    Width="24"
+                                                    MinWidth="0"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    IsChecked="{x:Bind IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    IsEnabled="{x:Bind IsDuplicate, Mode=OneWay}"/>
+                                                <Border Grid.Column="1" Width="52" Height="52" HorizontalAlignment="Left" BorderThickness="1" BorderBrush="{StaticResource AppBorderBrush}" Background="{StaticResource GroupHeaderBrush}">
+                                                    <Image Source="{x:Bind ThumbnailSource}" Width="50" Height="50" Stretch="Uniform"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <Button Content="Keep" Tag="{x:Bind Path}" Click="KeepFileButton_Click" IsEnabled="{x:Bind IsDuplicate, Mode=OneWay}" Style="{StaticResource SmallReviewButtonStyle}"/>
+                                                    <Button Content="Open" Tag="{x:Bind Path}" Click="OpenFileButton_Click" Style="{StaticResource SmallReviewButtonStyle}"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="3" Text="{x:Bind FileName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{x:Bind RowTextBrush, Mode=OneWay}"/>
+                                                <TextBlock Grid.Column="4" Text="{x:Bind SizeText}" VerticalAlignment="Center" Foreground="{x:Bind RowTextBrush, Mode=OneWay}"/>
+                                                <TextBlock Grid.Column="5" Text="{x:Bind LastWriteText}" VerticalAlignment="Center" Foreground="{x:Bind RowTextBrush, Mode=OneWay}"/>
+                                                <TextBlock Grid.Column="6" Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{x:Bind RowTextBrush, Mode=OneWay}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
+                    </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="5" Background="{StaticResource PanelBackgroundBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Padding="8">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{StaticResource AppTextSecondaryBrush}" FontWeight="Medium"/>
+                <Button Grid.Column="1" x:Name="ExportButton" Content="Export report" Click="ExportButton_Click" IsEnabled="False" Style="{StaticResource BlueButtonStyle}"/>
+                <Button Grid.Column="2" x:Name="SelectAllDuplicatesButton" Content="Select duplicates" Click="SelectAllDuplicatesButton_Click" IsEnabled="False" Style="{StaticResource BlueButtonStyle}"/>
+                <Button Grid.Column="3" x:Name="DeselectAllButton" Content="Deselect all" Click="DeselectAllButton_Click" IsEnabled="False" Style="{StaticResource BlueButtonStyle}"/>
+                <Button Grid.Column="4" x:Name="DeleteButton" Content="Delete Duplicates" Click="DeleteButton_Click" IsEnabled="False" Style="{StaticResource StrongBlueButtonStyle}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

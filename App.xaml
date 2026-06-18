@@ -1,0 +1,100 @@
+<Application
+    x:Class="CopyFinder.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0A0A0A"/>
+            <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#0A0A0A"/>
+            <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#1B1E22"/>
+            <SolidColorBrush x:Key="PanelBorderBrush" Color="#2E333A"/>
+            <SolidColorBrush x:Key="InputBackgroundBrush" Color="#20242A"/>
+            <SolidColorBrush x:Key="InputBorderBrush" Color="#3A4148"/>
+            <SolidColorBrush x:Key="SearchInputBackgroundBrush" Color="#F8FAFC"/>
+            <SolidColorBrush x:Key="SearchInputBorderBrush" Color="#D8DDE5"/>
+            <SolidColorBrush x:Key="SearchInputTextBrush" Color="#1A1A1A"/>
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#101112"/>
+            <SolidColorBrush x:Key="AppSurfaceBlueBrush" Color="#162334"/>
+            <SolidColorBrush x:Key="AppPrimaryBrush" Color="#0094FF"/>
+            <SolidColorBrush x:Key="AppPrimaryHoverBrush" Color="#1AA0FF"/>
+            <SolidColorBrush x:Key="AppPrimaryPressedBrush" Color="#0077CC"/>
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#FF3B30"/>
+            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#FF5C4D"/>
+            <SolidColorBrush x:Key="AppDangerPressedBrush" Color="#CC2F26"/>
+            <SolidColorBrush x:Key="AppMintBrush" Color="#00D4B4"/>
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#FF9500"/>
+            <SolidColorBrush x:Key="AppBorderBrush" Color="#34383D"/>
+            <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#F2F2F2"/>
+            <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#0094FF"/>
+            <SolidColorBrush x:Key="AppTextLightBrush" Color="#F2F2F2"/>
+            <SolidColorBrush x:Key="GroupHeaderBrush" Color="#1A1C20"/>
+            <SolidColorBrush x:Key="GroupHeaderTextBrush" Color="#0094FF"/>
+            <SolidColorBrush x:Key="GroupHeaderBorderBrush" Color="#2A2D31"/>
+            <SolidColorBrush x:Key="TableHeaderBrush" Color="#0094FF"/>
+            <SolidColorBrush x:Key="TableHeaderBorderBrush" Color="#0077CC"/>
+            <SolidColorBrush x:Key="TableHeaderTextBrush" Color="#FFFFFF"/>
+
+            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#202A3A"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#273346"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#182233"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="#F2F2F2"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#334052"/>
+            <SolidColorBrush x:Key="ExpanderContentBackground" Color="#101112"/>
+            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#34383D"/>
+
+            <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource AppPrimaryBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderBrush" Value="{StaticResource AppPrimaryPressedBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+            </Style>
+
+            <Style x:Key="BlueButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource PanelBorderBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+            </Style>
+
+            <Style x:Key="PrimaryActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+            </Style>
+
+            <Style x:Key="DangerButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource AppDangerBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderBrush" Value="{StaticResource AppDangerPressedBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+            </Style>
+
+            <Style x:Key="TopButtonStyle" TargetType="Button" BasedOn="{StaticResource BlueButtonStyle}">
+                <Setter Property="Width" Value="82"/>
+            </Style>
+
+            <Style x:Key="TopScanButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryActionButtonStyle}">
+                <Setter Property="Width" Value="82"/>
+            </Style>
+
+            <Style x:Key="ReviewButtonStyle" TargetType="Button" BasedOn="{StaticResource BlueButtonStyle}">
+                <Setter Property="Width" Value="72"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="Padding" Value="6,4"/>
+            </Style>
+
+            <Style x:Key="SmallReviewButtonStyle" TargetType="Button" BasedOn="{StaticResource BlueButtonStyle}">
+                <Setter Property="Width" Value="58"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="Padding" Value="6,4"/>
+            </Style>
+
+            <Style x:Key="StrongBlueButtonStyle" TargetType="Button" BasedOn="{StaticResource DangerButtonStyle}">
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
