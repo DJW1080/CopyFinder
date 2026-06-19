@@ -81,8 +81,18 @@ static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, str
     using var cts = new CancellationTokenSource();
 
     Log($"About to start Task.Run for {testName}");
+    Log($"About to invoke test() for {testName}");
 
-    var testTask = Task.Run(async () => await test(), cts.Token);
+    var testTask = Task.Run(async () =>
+    {
+        Log($"Task.Run started for {testName}");
+
+        await test();
+
+        Log($"Task.Run completed for {testName}");
+    }, cts.Token);
+
+    Log($"Task.Run returned control for {testName}");
 
     var timeoutTask = Task.Delay(timeout, cts.Token);
 
