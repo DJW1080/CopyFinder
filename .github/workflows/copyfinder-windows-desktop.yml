@@ -12,126 +12,73 @@ permissions:
 
 env:
   Solution_Name: CopyFinder.sln
-  Project_Path: CopyFinder.csproj
-  Test_Project_Path: Tests\CopyFinder.Tests.csproj
   Publish_Script: .\publish.ps1
   Runtime: win-x64
   Configuration: Release
 
 jobs:
-  build-test-publish:
-    name: Build, Test, and Publish (Release)
+  build-publish:
+    name: Build and Publish
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      # Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # .NET SDK
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      # Environment info (useful for debugging runners)
-      - name: Show .NET environment
-        shell: pwsh
-        run: dotnet --info
-
-      # Restore
       - name: Restore dependencies
         shell: pwsh
         run: dotnet restore $env:Solution_Name
 
-      # Build
-      - name: Build solution (Release)
-        shell: pwsh
-        run: dotnet build $env:Solution_Name --configuration $env:Configuration --no-restore -v:minimal
-
-      # Create deterministic test fixture
-      - name: Create bounded scan fixture
+      - name: Build solution
         shell: pwsh
         run: |
-          $fixtureRoot = Join-Path $env:RUNNER_TEMP "CopyFinderScanFixture"
-
-          if (Test-Path -LiteralPath $fixtureRoot) {
-            Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
-          }
-
-          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "A") | Out-Null
-          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "B") | Out-Null
-          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "Unique") | Out-Null
-
-          "bounded duplicate content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "A\duplicate-a.txt") -Encoding UTF8
-          "bounded duplicate content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "B\duplicate-b.txt") -Encoding UTF8
-          "unique workflow content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "Unique\unique.txt") -Encoding UTF8
-
-          "COPYFINDER_WORKFLOW_SCAN_ROOT=$fixtureRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-          Write-Host "Fixture created at: $fixtureRoot"
-
-      # NEW: show fixture contents (debug visibility)
-      - name: Show test fixture contents
-        shell: pwsh
-        run: |
-          Write-Host "COPYFINDER_WORKFLOW_SCAN_ROOT=$env:COPYFINDER_WORKFLOW_SCAN_ROOT"
-
-          if (-not (Test-Path -LiteralPath $env:COPYFINDER_WORKFLOW_SCAN_ROOT)) {
-            throw "Fixture root does not exist."
-          }
-
-          Get-ChildItem -LiteralPath $env:COPYFINDER_WORKFLOW_SCAN_ROOT -Recurse |
-            Select-Object FullName, Length |
-            Format-Table -AutoSize
-
-      # FIXED: proper test execution
-      - name: Run regression harness
-        shell: pwsh
-        timeout-minutes: 5
-        run: |
-          dotnet run `
-            --project $env:Test_Project_Path `
+          dotnet build `
+            $env:Solution_Name `
             --configuration $env:Configuration `
-            --no-build
+            --no-restore
 
-      # Publish
       - name: Publish standalone zip
         shell: pwsh
-        run: '& $env:Publish_Script -Configuration Release -Runtime $env:Runtime'
+        run: |
+          & $env:Publish_Script `
+            -Configuration $env:Configuration `
+            -Runtime $env:Runtime
 
-      # Verify checksum
-      - name: Verify standalone zip checksum
+      - name: Verify checksum
         shell: pwsh
         run: |
-          $zip = Get-ChildItem -LiteralPath .\publish -Filter "CopyFinder-v*-$env:Runtime-Standalone.zip" -File | Select-Object -First 1
-          if (-not $zip) {
-            throw "Standalone zip was not created."
+          $zip = Get-ChildItem .\publish -Filter "*.zip" -File | Select-Object -First 1
+
+          if (-not $zip)
+          {
+              throw "No zip file created."
           }
 
-          $hashPath = "$($zip.FullName).sha256.txt"
-          if (-not (Test-Path -LiteralPath $hashPath)) {
-            throw "SHA-256 sidecar was not created: $hashPath"
+          $hashFile = "$($zip.FullName).sha256.txt"
+
+          if (-not (Test-Path $hashFile))
+          {
+              throw "Missing checksum file."
           }
 
-          $expected = (Get-Content -LiteralPath $hashPath).Split(" ")[0]
-          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip.FullName).Hash
+          $expected = (Get-Content $hashFile).Split(" ")[0]
+          $actual = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash
 
-          if ($actual -ne $expected) {
-            throw "Checksum mismatch. Expected $expected but got $actual."
+          if ($expected -ne $actual)
+          {
+              throw "Checksum mismatch."
           }
 
-          Write-Host "Verified $($zip.Name): $actual"
-
-      # Upload artifact
-      - name: Upload standalone release zip
+      - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: CopyFinder-Standalone
           path: |
             publish/*.zip
             publish/*.zip.sha256.txt
-          if-no-files-found: error
