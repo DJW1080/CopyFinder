@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CopyFinder.Models;
 using CopyFinder.Services;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 var tests = new (string Name, Func<Task> Test)[]
 {
@@ -11,10 +12,19 @@ var tests = new (string Name, Func<Task> Test)[]
     ("scanner stops hashing current group after duplicate limit", ScannerStopsHashingCurrentGroupAfterDuplicateLimit),
     ("scanner stress keeps duplicate limit bounded", ScannerStressKeepsDuplicateLimitBounded),
     ("publish script removes pdb files before zip", PublishScriptRemovesPdbFilesBeforeZip),
-    ("version stamp is 2.0.3", VersionStampIsTwoPointZeroThree),
+    ("project excludes generated release content", ProjectExcludesGeneratedReleaseContent),
+    ("version stamp is 2.0.6", VersionStampIsTwoPointZeroSix),
+    ("install instructions cover deployment steps", InstallInstructionsCoverDeploymentSteps),
     ("technification assets are complete", TechnificationAssetsAreComplete),
+    ("report formatter exports csv and json", ReportFormatterExportsCsvAndJson),
     ("delete validator accepts unchanged duplicate", DeleteValidatorAcceptsUnchangedDuplicate),
-    ("delete validator rejects changed duplicate", DeleteValidatorRejectsChangedDuplicate)
+    ("delete validator rejects changed duplicate", DeleteValidatorRejectsChangedDuplicate),
+    ("safe file hashes through wrapper", SafeFileHashesThroughWrapper),
+    ("safe file deletes through wrapper", SafeFileDeletesThroughWrapper),
+    ("safe file writes deployment log to configured path", SafeFileWritesDeploymentLogToConfiguredPath),
+    ("safe file detects configured OneDrive root", SafeFileDetectsConfiguredOneDriveRoot),
+    ("main window does not delete directly", MainWindowDoesNotDeleteDirectly),
+    ("compatibility report includes CFA allow path", CompatibilityReportIncludesCfaAllowPath)
 };
 
 var failures = new List<string>();
@@ -150,29 +160,112 @@ static Task PublishScriptRemovesPdbFilesBeforeZip()
     var script = File.ReadAllText(scriptPath);
     var removePdbIndex = script.IndexOf("-Filter '*.pdb'", StringComparison.OrdinalIgnoreCase);
     var zipIndex = script.IndexOf("Compress-Archive", StringComparison.OrdinalIgnoreCase);
+    var hashIndex = script.IndexOf("Get-FileHash -Algorithm SHA256", StringComparison.OrdinalIgnoreCase);
+    var staleHashCleanupIndex = script.IndexOf("CopyFinder-v*-$Runtime-Standalone.zip.sha256.txt", StringComparison.OrdinalIgnoreCase);
 
     AssertTrue(removePdbIndex >= 0, "publish.ps1 should remove PDB files from normal standalone output.");
     AssertTrue(zipIndex >= 0, "publish.ps1 should create a zip archive.");
+    AssertTrue(hashIndex >= 0, "publish.ps1 should create a SHA-256 checksum for the zip.");
+    AssertTrue(staleHashCleanupIndex >= 0, "publish.ps1 should clean stale checksum sidecar files.");
     AssertTrue(removePdbIndex < zipIndex, "PDB removal should happen before Compress-Archive.");
+    AssertTrue(zipIndex < hashIndex, "Checksum creation should happen after Compress-Archive.");
 
     return Task.CompletedTask;
 }
 
-static Task VersionStampIsTwoPointZeroThree()
+static Task ProjectExcludesGeneratedReleaseContent()
+{
+    var project = File.ReadAllText(Path.Combine(FindWorkspaceRoot(), "CopyFinder.csproj"));
+
+    AssertContains(@"<Content Remove=""Tests\**;TestArtifacts\**;publish\**""", project);
+    AssertContains(@"<None Remove=""Tests\**;TestArtifacts\**;publish\**""", project);
+    AssertContains(@"<Compile Remove=""Tests\**\*.cs""", project);
+    AssertContains(@"<Content Include=""INSTALL.md"" CopyToOutputDirectory=""PreserveNewest""", project);
+
+    return Task.CompletedTask;
+}
+
+static Task VersionStampIsTwoPointZeroSix()
 {
     var workspace = FindWorkspaceRoot();
     var project = File.ReadAllText(Path.Combine(workspace, "CopyFinder.csproj"));
     var manifest = File.ReadAllText(Path.Combine(workspace, "app.manifest"));
     var mainWindow = File.ReadAllText(Path.Combine(workspace, "MainWindow.xaml"));
     var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
+    var install = File.ReadAllText(Path.Combine(workspace, "INSTALL.md"));
 
-    AssertContains("<Version>2.0.3</Version>", project);
-    AssertContains("<AssemblyVersion>2.0.3.0</AssemblyVersion>", project);
-    AssertContains("<FileVersion>2.0.3.0</FileVersion>", project);
-    AssertContains("<InformationalVersion>2.0.3</InformationalVersion>", project);
-    AssertContains("assemblyIdentity version=\"2.0.3.0\"", manifest);
-    AssertContains("Text=\"2.0.3\"", mainWindow);
-    AssertContains("Version: 2.0.3", readme);
+    AssertContains("<Version>2.0.6</Version>", project);
+    AssertContains("<AssemblyVersion>2.0.6.0</AssemblyVersion>", project);
+    AssertContains("<FileVersion>2.0.6.0</FileVersion>", project);
+    AssertContains("<InformationalVersion>2.0.6</InformationalVersion>", project);
+    AssertContains("assemblyIdentity version=\"2.0.6.0\"", manifest);
+    AssertContains("Text=\"2.0.6\"", mainWindow);
+    AssertContains("Version: 2.0.6", readme);
+    AssertContains("Version: 2.0.6", install);
+
+    return Task.CompletedTask;
+}
+
+static Task InstallInstructionsCoverDeploymentSteps()
+{
+    var workspace = FindWorkspaceRoot();
+    var install = File.ReadAllText(Path.Combine(workspace, "INSTALL.md"));
+    var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
+    var repoLayout = File.ReadAllText(Path.Combine(workspace, "REPO_LAYOUT.md"));
+
+    AssertContains("CopyFinder-v2.0.6-win-x64-Standalone.zip", install);
+    AssertContains("CopyFinder-v2.0.6-win-x64-Standalone.zip.sha256.txt", install);
+    AssertContains("Get-FileHash -Algorithm SHA256", install);
+    AssertContains("Expand-Archive", install);
+    AssertContains("Add-MpPreference -ControlledFolderAccessAllowedApplications", install);
+    AssertContains("%ProgramData%\\CopyFinder\\Logs\\deployment.log", install);
+    AssertContains("%LOCALAPPDATA%\\CopyFinder\\Temp", install);
+    AssertContains("INSTALL.md", readme);
+    AssertContains("INSTALL.md", repoLayout);
+
+    return Task.CompletedTask;
+}
+
+static Task ReportFormatterExportsCsvAndJson()
+{
+    var files = new[]
+    {
+        new DuplicateReportFile(
+            GroupId: 1,
+            Role: "Keep",
+            IsSelected: false,
+            IsOriginal: true,
+            Size: 100,
+            Hash: "hash-a",
+            ImageWidth: 800,
+            ImageHeight: 600,
+            LastWriteTime: new DateTime(2026, 6, 18, 9, 30, 0, DateTimeKind.Local),
+            Path: @"C:\Data\keep,file.txt"),
+        new DuplicateReportFile(
+            GroupId: 1,
+            Role: "Duplicate",
+            IsSelected: true,
+            IsOriginal: false,
+            Size: 100,
+            Hash: "hash-a",
+            ImageWidth: null,
+            ImageHeight: null,
+            LastWriteTime: new DateTime(2026, 6, 18, 9, 31, 0, DateTimeKind.Local),
+            Path: @"\\server\share\duplicate ""quoted"".txt")
+    };
+
+    var csv = DuplicateReportFormatter.BuildCsvReport(files);
+    AssertContains("GroupId,Role,Selected,Size,Hash,ImageWidth,ImageHeight,Modified,NetworkPath,DeleteStatus,Path", csv);
+    AssertContains("\"C:\\Data\\keep,file.txt\"", csv);
+    AssertContains("True,\"Selected\",\"\\\\server\\share\\duplicate \"\"quoted\"\".txt\"", csv);
+
+    using var document = JsonDocument.Parse(DuplicateReportFormatter.BuildJsonReport(files));
+    var rows = document.RootElement.EnumerateArray().ToList();
+    AssertEqual(2, rows.Count, "JSON report should include both files.");
+    AssertEqual("Kept", rows[0].GetProperty("DeleteStatus").GetString() ?? string.Empty, "Original file should be marked kept.");
+    AssertFalse(rows[0].GetProperty("IsNetworkPath").GetBoolean(), "Local path should not be marked as network.");
+    AssertTrue(rows[1].GetProperty("IsNetworkPath").GetBoolean(), "UNC path should be marked as network.");
+    AssertEqual("Selected", rows[1].GetProperty("DeleteStatus").GetString() ?? string.Empty, "Selected duplicate should be marked selected.");
 
     return Task.CompletedTask;
 }
@@ -358,6 +451,129 @@ static async Task DeleteValidatorRejectsChangedDuplicate()
     {
         DeleteTestDirectory(artifactRoot);
     }
+}
+
+static async Task SafeFileHashesThroughWrapper()
+{
+    var artifactRoot = CreateArtifactRoot();
+    try
+    {
+        var filePath = Path.Combine(artifactRoot, "hash.txt");
+        await File.WriteAllTextAsync(filePath, "safe file hash content");
+
+        var expected = ComputeSha256(filePath);
+        var actual = await SafeFile.ComputeSha256Async(filePath, CancellationToken.None);
+
+        AssertEqual(expected, actual, "SafeFile hash should match direct SHA-256.");
+    }
+    finally
+    {
+        DeleteTestDirectory(artifactRoot);
+    }
+}
+
+static async Task SafeFileDeletesThroughWrapper()
+{
+    var artifactRoot = CreateArtifactRoot();
+    try
+    {
+        var filePath = Path.Combine(artifactRoot, "delete-me.txt");
+        await File.WriteAllTextAsync(filePath, "delete through safe wrapper");
+
+        var result = await SafeFile.DeleteAsync(filePath, allowPermissionRepair: false, CancellationToken.None);
+
+        AssertTrue(result.Succeeded, result.Message ?? "SafeFile delete should succeed.");
+        AssertFalse(File.Exists(filePath), "Deleted file should no longer exist at the original path.");
+    }
+    finally
+    {
+        DeleteTestDirectory(artifactRoot);
+    }
+}
+
+static Task SafeFileWritesDeploymentLogToConfiguredPath()
+{
+    var artifactRoot = CreateArtifactRoot();
+    var logPath = Path.Combine(artifactRoot, "deployment.log");
+    try
+    {
+        DeploymentLogger.UseLogPathForTests(logPath);
+        var wrote = DeploymentLogger.Log("Test", "SafeFile deployment logger test.");
+
+        AssertTrue(wrote, "Deployment logger should write to the configured test path.");
+        AssertTrue(File.Exists(logPath), "Deployment log should exist.");
+        AssertContains("SafeFile deployment logger test.", File.ReadAllText(logPath));
+    }
+    finally
+    {
+        DeploymentLogger.ResetLogPathForTests();
+        DeleteTestDirectory(artifactRoot);
+    }
+
+    return Task.CompletedTask;
+}
+
+static async Task SafeFileDetectsConfiguredOneDriveRoot()
+{
+    var artifactRoot = CreateArtifactRoot();
+    var previousConsumer = Environment.GetEnvironmentVariable("OneDriveConsumer");
+    try
+    {
+        Environment.SetEnvironmentVariable("OneDriveConsumer", artifactRoot);
+        var filePath = Path.Combine(artifactRoot, "inside-onedrive.txt");
+        await File.WriteAllTextAsync(filePath, "onedrive root test");
+
+        var state = OneDriveFileHandler.GetState(filePath, checkInUse: false);
+
+        AssertTrue(state.IsInsideOneDrive, "File should be recognized inside the configured OneDrive root.");
+        AssertEqual(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar), state.OneDriveRoot ?? string.Empty, "OneDrive root should match the configured environment path.");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("OneDriveConsumer", previousConsumer);
+        DeleteTestDirectory(artifactRoot);
+    }
+}
+
+static Task MainWindowDoesNotDeleteDirectly()
+{
+    var workspace = FindWorkspaceRoot();
+    var mainWindow = File.ReadAllText(Path.Combine(workspace, "MainWindow.xaml.cs"));
+    var safeFile = File.ReadAllText(Path.Combine(workspace, "Services", "SafeFile.cs"));
+
+    AssertFalse(mainWindow.Contains("FileSystem.DeleteFile", StringComparison.Ordinal), "MainWindow should route deletes through SafeFile.");
+    AssertContains("FileSystem.DeleteFile", safeFile);
+    AssertContains("SafeFile.DeleteAsync", mainWindow);
+
+    return Task.CompletedTask;
+}
+
+static Task CompatibilityReportIncludesCfaAllowPath()
+{
+    var cfa = new ControlledFolderAccessStatus(
+        ControlledFolderAccessMode.Enabled,
+        @"C:\Apps\CopyFinder\CopyFinder.exe",
+        @"Add-MpPreference -ControlledFolderAccessAllowedApplications ""C:\Apps\CopyFinder\CopyFinder.exe""",
+        "Controlled Folder Access is active.",
+        RequiresUserAction: true);
+
+    var report = new DeploymentCompatibilityReport(
+        cfa,
+        [@"C:\Users\Test\OneDrive"],
+        new PermissionCheckResult(true, false, "Working directory is writable."),
+        @"C:\Users\Test\AppData\Local\CopyFinder\Temp",
+        @"C:\ProgramData\CopyFinder\Logs\deployment.log",
+        DeploymentLogAvailable: true,
+        IsElevated: false,
+        "Not installed.");
+
+    var message = report.ToUserMessage();
+
+    AssertContains(@"C:\Apps\CopyFinder\CopyFinder.exe", message);
+    AssertContains(@"C:\ProgramData\CopyFinder\Logs\deployment.log", message);
+    AssertContains("Controlled Folder Access: Enabled", message);
+
+    return Task.CompletedTask;
 }
 
 static string FindWorkspaceRoot()

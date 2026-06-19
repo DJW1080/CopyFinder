@@ -15,6 +15,7 @@ CopyFinder/
 |-- MainWindow.xaml.cs
 |-- app.manifest
 |-- publish.ps1
+|-- INSTALL.md
 |-- README.md
 |-- REPO_LAYOUT.md
 |-- Models/
@@ -37,6 +38,7 @@ CopyFinder/
 | `MainWindow.xaml.cs` | UI event handling, scan orchestration, export flow, delete flow, and state wiring. |
 | `app.manifest` | Desktop app manifest settings including app identity version and DPI awareness. |
 | `publish.ps1` | Release script that creates `publish\CopyFinder-Standalone` and a standalone zip. |
+| `INSTALL.md` | End-user install, update, uninstall, checksum, CFA, OneDrive, and enterprise deployment notes. |
 | `README.md` | User-facing overview, build, test, run, and publish commands. |
 | `REPO_LAYOUT.md` | Repository map and source/generated artifact guidance. |
 | `.gitignore` | Excludes local build, test, IDE, and release output. |
@@ -46,7 +48,7 @@ CopyFinder/
 | Path | Purpose |
 | --- | --- |
 | `Models\` | Plain data models and scan options used across scanning, review, and settings. |
-| `Services\` | Scanner, settings persistence, shell picker integration, and delete-safety validation. |
+| `Services\` | Scanner, deployment-safe file operations, compatibility checks, settings persistence, shell picker integration, and delete-safety validation. |
 | `ViewModels\` | UI-facing duplicate group/file state used by the WinUI review grid. |
 | `Tests\` | Focused console regression harness for scanner behavior, delete validation, version stamps, and publish policy. |
 | `Technification\` | Runtime logo, app icon, and file-type image assets copied into app output. |
@@ -56,14 +58,24 @@ CopyFinder/
 ```text
 Models/
 |-- AppSettings.cs
+|-- DeploymentCompatibilityReport.cs
 |-- DuplicateFile.cs
+|-- DuplicateReportFile.cs
 |-- DuplicateScanResult.cs
 |-- KeepRule.cs
 `-- ScanOptions.cs
 
 Services/
+|-- ControlledFolderAccessService.cs
+|-- DeploymentCompatibilityChecker.cs
+|-- DeploymentLogger.cs
 |-- DuplicateDeleteValidator.cs
+|-- DuplicateReportFormatter.cs
 |-- DuplicateScanner.cs
+|-- FilePathClassifier.cs
+|-- NtfsPermissionService.cs
+|-- OneDriveFileHandler.cs
+|-- SafeFile.cs
 |-- SettingsService.cs
 |-- ShellFileSavePicker.cs
 `-- ShellFolderPicker.cs

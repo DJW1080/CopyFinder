@@ -18,7 +18,12 @@ public sealed class SettingsService
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CopyFinder");
 
-        Directory.CreateDirectory(settingsDirectory);
+        var directoryResult = SafeFile.EnsureDirectory(settingsDirectory);
+        if (!directoryResult.Succeeded)
+        {
+            DeploymentLogger.Log("Settings", $"Could not prepare settings directory: {directoryResult.Message}");
+        }
+
         _settingsPath = Path.Combine(settingsDirectory, "settings.json");
     }
 
@@ -43,6 +48,10 @@ public sealed class SettingsService
     public void Save(AppSettings settings)
     {
         var json = JsonSerializer.Serialize(settings, SerializerOptions);
-        File.WriteAllText(_settingsPath, json);
+        var result = SafeFile.WriteAllText(_settingsPath, json);
+        if (!result.Succeeded)
+        {
+            throw new IOException(result.Message);
+        }
     }
 }

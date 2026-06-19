@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace CopyFinder.Services;
 
 public sealed record DuplicateDeleteCandidate(
@@ -36,12 +34,12 @@ public static class DuplicateDeleteValidator
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: duplicate path is the kept file.");
             }
 
-            if (!File.Exists(duplicatePath))
+            if (!SafeFile.FileExists(duplicatePath))
             {
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: duplicate file no longer exists: {candidate.DuplicatePath}");
             }
 
-            if (!File.Exists(keptPath))
+            if (!SafeFile.FileExists(keptPath))
             {
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: kept file no longer exists: {candidate.KeptPath}");
             }
@@ -58,13 +56,13 @@ public static class DuplicateDeleteValidator
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: kept file changed since scan: {candidate.KeptPath}");
             }
 
-            var duplicateHash = await ComputeSha256Async(duplicatePath, cancellationToken);
+            var duplicateHash = await SafeFile.ComputeSha256Async(duplicatePath, cancellationToken);
             if (!string.Equals(duplicateHash, candidate.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: duplicate file changed since scan: {candidate.DuplicatePath}");
             }
 
-            var keptHash = await ComputeSha256Async(keptPath, cancellationToken);
+            var keptHash = await SafeFile.ComputeSha256Async(keptPath, cancellationToken);
             if (!string.Equals(keptHash, candidate.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 return DuplicateDeleteValidation.Fail($"Group {candidate.GroupId}: kept file changed since scan: {candidate.KeptPath}");
@@ -78,17 +76,4 @@ public static class DuplicateDeleteValidator
         }
     }
 
-    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-        var hash = await SHA256.HashDataAsync(stream, cancellationToken);
-        return Convert.ToHexString(hash);
-    }
 }

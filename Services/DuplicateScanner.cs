@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
 using CopyFinder.Models;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
@@ -125,7 +124,7 @@ public sealed class DuplicateScanner
 
             try
             {
-                var hash = await ComputeSha256Async(file.FullName, cancellationToken);
+                var hash = await SafeFile.ComputeSha256Async(file.FullName, cancellationToken);
                 if (!filesByHash.TryGetValue(hash, out var matchingFiles))
                 {
                     matchingFiles = [];
@@ -173,7 +172,7 @@ public sealed class DuplicateScanner
 
             try
             {
-                var hash = await ComputeSha256Async(file.FullName, token);
+                var hash = await SafeFile.ComputeSha256Async(file.FullName, token);
                 filesByHash.GetOrAdd(hash, _ => []).Add(file);
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
@@ -213,18 +212,14 @@ public sealed class DuplicateScanner
                 continue;
             }
 
-            IEnumerable<string> subdirectories;
-            try
-            {
-                subdirectories = Directory.EnumerateDirectories(currentDirectory).ToList();
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            var subdirectories = SafeFile.EnumerateDirectories(currentDirectory);
+            if (subdirectories.ErrorMessage is not null)
             {
                 progress?.Report(new ScanProgress($"Skipped folder: {currentDirectory}"));
                 continue;
             }
 
-            foreach (var subdirectory in subdirectories)
+            foreach (var subdirectory in subdirectories.Paths)
             {
                 if (ShouldSkipDirectory(subdirectory, progress))
                 {
@@ -234,18 +229,14 @@ public sealed class DuplicateScanner
                 pending.Push(subdirectory);
             }
 
-            IEnumerable<string> files;
-            try
-            {
-                files = Directory.EnumerateFiles(currentDirectory).ToList();
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            var files = SafeFile.EnumerateFiles(currentDirectory);
+            if (files.ErrorMessage is not null)
             {
                 progress?.Report(new ScanProgress($"Skipped folder: {currentDirectory}"));
                 continue;
             }
 
-            foreach (var path in files)
+            foreach (var path in files.Paths)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -307,20 +298,6 @@ public sealed class DuplicateScanner
             progress?.Report(new ScanProgress($"Skipped folder: {directory}"));
             return true;
         }
-    }
-
-    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-        var hash = await SHA256.HashDataAsync(stream, cancellationToken);
-        return Convert.ToHexString(hash);
     }
 
     private static long GetPrimaryKeepScore(
@@ -443,13 +420,13 @@ public sealed class DuplicateScanner
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            metadata[file.FullName] = await TryReadImageMetadataAsync(file.FullName);
+            metadata[file.FullName] = await TryReadImageMetadataAsync(file.FullName, cancellationToken);
         }
 
         return metadata;
     }
 
-    private static async Task<ImageMetadata> TryReadImageMetadataAsync(string path)
+    private static async Task<ImageMetadata> TryReadImageMetadataAsync(string path, CancellationToken cancellationToken)
     {
         if (!IsSupportedImageFile(path))
         {
@@ -458,7 +435,8 @@ public sealed class DuplicateScanner
 
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(path);
+            await using var workingFile = await SafeFile.CopyToWorkingDirAsync(path, "Image metadata", cancellationToken);
+            var file = await StorageFile.GetFileFromPathAsync(workingFile.ProcessingPath);
             using var stream = await file.OpenReadAsync();
             var decoder = await BitmapDecoder.CreateAsync(stream);
             return new ImageMetadata((int)decoder.PixelWidth, (int)decoder.PixelHeight);

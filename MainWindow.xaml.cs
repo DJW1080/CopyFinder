@@ -3,7 +3,6 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 using CopyFinder.Models;
 using CopyFinder.Services;
 using CopyFinder.ViewModels;
@@ -21,6 +20,7 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _scanCancellation;
     private int _deleteActionNumber;
     private bool _isLoadingSettings;
+    private bool _compatibilityReportStarted;
 
     public MainWindow()
     {
@@ -29,6 +29,7 @@ public sealed partial class MainWindow : Window
         _settings = _settingsService.Load();
         DuplicateGroups.CollectionChanged += DuplicateGroups_CollectionChanged;
         LoadSettingsIntoUi();
+        Activated += MainWindow_Activated;
     }
 
     public ObservableCollection<DuplicateGroupViewModel> DuplicateGroups { get; } = [];
@@ -42,7 +43,7 @@ public sealed partial class MainWindow : Window
         {
             var selectedPath = ShellFolderPicker.PickFolder(
                 WindowNative.GetWindowHandle(this),
-                Directory.Exists(FolderPathBox.Text)
+                SafeFile.DirectoryExists(FolderPathBox.Text)
                     ? FolderPathBox.Text
                     : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
 
@@ -61,7 +62,7 @@ public sealed partial class MainWindow : Window
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
     {
         var folder = FolderPathBox.Text;
-        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        if (string.IsNullOrWhiteSpace(folder) || !SafeFile.DirectoryExists(folder))
         {
             await ShowMessageAsync("Choose an existing folder before scanning.");
             return;
@@ -209,7 +210,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var networkFileCount = selectedFiles.Count(file => IsNetworkPath(file.Path));
+        var networkFileCount = selectedFiles.Count(file => FilePathClassifier.IsNetworkPath(file.Path));
         var networkWarning = networkFileCount > 0
             ? $"{Environment.NewLine}{Environment.NewLine}Warning: {networkFileCount:N0} selected file(s) are on network paths or mapped network drives. Network-drive deletion may be final and may not use the Recycle Bin."
             : string.Empty;
@@ -250,13 +251,15 @@ public sealed partial class MainWindow : Window
                     continue;
                 }
 
-                await Task.Run(() =>
+                var deleteResult = await SafeFile.DeleteAsync(
+                    candidate.DuplicatePath,
+                    allowPermissionRepair: false,
+                    CancellationToken.None);
+                if (!deleteResult.Succeeded)
                 {
-                    Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
-                        candidate.DuplicatePath,
-                        Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
-                        Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
-                });
+                    failures.Add($"{candidate.DuplicatePath}: {deleteResult.Message ?? "delete failed"}");
+                    continue;
+                }
 
                 if (selectedByPath.TryGetValue(candidate.DuplicatePath, out var file))
                 {
@@ -315,13 +318,32 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            var reportFiles = CreateReportFiles();
             if (string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
             {
-                await File.WriteAllTextAsync(path, BuildJsonReport());
+                var writeResult = await SafeFile.WriteAllTextAsync(
+                    path,
+                    DuplicateReportFormatter.BuildJsonReport(reportFiles),
+                    encoding: null,
+                    CancellationToken.None);
+                if (!writeResult.Succeeded)
+                {
+                    await ShowMessageAsync($"Export failed: {writeResult.Message}");
+                    return;
+                }
             }
             else
             {
-                await File.WriteAllTextAsync(path, BuildCsvReport(), Encoding.UTF8);
+                var writeResult = await SafeFile.WriteAllTextAsync(
+                    path,
+                    DuplicateReportFormatter.BuildCsvReport(reportFiles),
+                    Encoding.UTF8,
+                    CancellationToken.None);
+                if (!writeResult.Succeeded)
+                {
+                    await ShowMessageAsync($"Export failed: {writeResult.Message}");
+                    return;
+                }
             }
 
             StatusText.Text = $"Report exported: {path}";
@@ -365,13 +387,13 @@ public sealed partial class MainWindow : Window
         try
         {
             var directory = Path.GetDirectoryName(path);
-            if (!File.Exists(path) && string.IsNullOrWhiteSpace(directory))
+            if (!SafeFile.FileExists(path) && string.IsNullOrWhiteSpace(directory))
             {
                 await ShowMessageAsync("Could not determine the file location.");
                 return;
             }
 
-            var argument = File.Exists(path) ? $"/select,\"{path}\"" : $"\"{directory}\"";
+            var argument = SafeFile.FileExists(path) ? $"/select,\"{path}\"" : $"\"{directory}\"";
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
@@ -520,6 +542,21 @@ public sealed partial class MainWindow : Window
         return candidates;
     }
 
+    private List<DuplicateReportFile> CreateReportFiles()
+    {
+        return DuplicateFiles.Select(file => new DuplicateReportFile(
+            file.GroupId,
+            file.Role,
+            file.IsSelected,
+            file.IsOriginal,
+            file.Size,
+            file.Hash,
+            file.ImageWidth,
+            file.ImageHeight,
+            file.LastWriteTime,
+            file.Path)).ToList();
+    }
+
     private ScanOptions BuildScanOptionsFromUi()
     {
         return new ScanOptions
@@ -599,80 +636,11 @@ public sealed partial class MainWindow : Window
         return double.IsNaN(numberBox.Value) ? fallback : numberBox.Value;
     }
 
-    private string BuildJsonReport()
-    {
-        var rows = DuplicateFiles.Select(file => new
-        {
-            file.GroupId,
-            file.Role,
-            file.IsSelected,
-            file.Size,
-            file.Hash,
-            file.ImageWidth,
-            file.ImageHeight,
-            file.LastWriteTime,
-            file.Path,
-            IsNetworkPath = IsNetworkPath(file.Path),
-            DeleteStatus = file.IsOriginal ? "Kept" : file.IsSelected ? "Selected" : "Not selected"
-        });
-
-        return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = true });
-    }
-
-    private string BuildCsvReport()
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("GroupId,Role,Selected,Size,Hash,ImageWidth,ImageHeight,Modified,NetworkPath,DeleteStatus,Path");
-
-        foreach (var file in DuplicateFiles)
-        {
-            var deleteStatus = file.IsOriginal ? "Kept" : file.IsSelected ? "Selected" : "Not selected";
-            builder.Append(file.GroupId).Append(',')
-                .Append(Csv(file.Role)).Append(',')
-                .Append(file.IsSelected).Append(',')
-                .Append(file.Size).Append(',')
-                .Append(Csv(file.Hash)).Append(',')
-                .Append(file.ImageWidth?.ToString() ?? string.Empty).Append(',')
-                .Append(file.ImageHeight?.ToString() ?? string.Empty).Append(',')
-                .Append(Csv(file.LastWriteTime.ToString("O"))).Append(',')
-                .Append(IsNetworkPath(file.Path)).Append(',')
-                .Append(Csv(deleteStatus)).Append(',')
-                .Append(Csv(file.Path))
-                .AppendLine();
-        }
-
-        return builder.ToString();
-    }
-
-    private static string Csv(string value)
-    {
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
-    }
-
-    private static bool IsNetworkPath(string path)
-    {
-        if (path.StartsWith(@"\\", StringComparison.Ordinal) ||
-            path.StartsWith("//", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        try
-        {
-            var root = Path.GetPathRoot(path);
-            return !string.IsNullOrWhiteSpace(root) && new DriveInfo(root).DriveType == DriveType.Network;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static bool IsExistingDirectoryPath(string path)
     {
         try
         {
-            return !string.IsNullOrWhiteSpace(path) && Directory.Exists(Path.GetFullPath(path));
+            return !string.IsNullOrWhiteSpace(path) && SafeFile.DirectoryExists(Path.GetFullPath(path));
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
@@ -778,9 +746,50 @@ public sealed partial class MainWindow : Window
     private void SetWindowIcon()
     {
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Technification", "Logo", "favicon", "favicon.ico");
-        if (File.Exists(iconPath))
+        if (SafeFile.FileExists(iconPath))
         {
             AppWindow.SetIcon(iconPath);
         }
+    }
+
+    private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        if (_compatibilityReportStarted)
+        {
+            return;
+        }
+
+        _compatibilityReportStarted = true;
+        await ShowFirstRunCompatibilityReportAsync();
+    }
+
+    private async Task ShowFirstRunCompatibilityReportAsync()
+    {
+        var version = GetAppVersion();
+        if (string.Equals(_settings.LastCompatibilityReportVersion, version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var report = await new DeploymentCompatibilityChecker().CheckAsync(CancellationToken.None);
+            await ShowMessageAsync(report.ToUserMessage());
+            _settings.LastCompatibilityReportVersion = version;
+            _settingsService.Save(_settings);
+        }
+        catch (Exception ex)
+        {
+            DeploymentLogger.Log("Compatibility", "First-run compatibility check failed.", ex);
+            StatusText.Text = $"Compatibility check failed: {ex.Message}";
+        }
+    }
+
+    private static string GetAppVersion()
+    {
+        var version = typeof(MainWindow).Assembly.GetName().Version;
+        return version is null
+            ? "dev"
+            : $"{version.Major}.{version.Minor}.{version.Build}";
     }
 }

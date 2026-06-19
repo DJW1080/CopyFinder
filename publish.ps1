@@ -53,6 +53,9 @@ if (Test-Path -LiteralPath $outputFullPath) {
 Get-ChildItem -LiteralPath $publishRoot -Filter "CopyFinder-v*-$Runtime-Standalone.zip" -File |
     Remove-Item -Force
 
+Get-ChildItem -LiteralPath $publishRoot -Filter "CopyFinder-v*-$Runtime-Standalone.zip.sha256.txt" -File |
+    Remove-Item -Force
+
 if (Test-Path -LiteralPath $zipFullPath) {
     Remove-Item -LiteralPath $zipFullPath -Force
 }
@@ -103,6 +106,11 @@ if (-not $IncludeDebugSymbols) {
 
 Compress-Archive -Path (Join-Path $outputFullPath '*') -DestinationPath $zipFullPath -Force
 
+$hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zipFullPath
+$hashPath = "$zipFullPath.sha256.txt"
+"$($hash.Hash)  $(Split-Path -Leaf $zipFullPath)" | Set-Content -LiteralPath $hashPath -Encoding ASCII
+
 Write-Host "CopyFinder published to: $outputFullPath"
 Write-Host "Run: $(Join-Path $outputFullPath 'CopyFinder.exe')"
 Write-Host "Zip created: $zipFullPath"
+Write-Host "SHA-256 created: $hashPath"

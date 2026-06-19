@@ -4,10 +4,10 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
     <RootNamespace>CopyFinder</RootNamespace>
-    <Version>2.0.3</Version>
-    <AssemblyVersion>2.0.3.0</AssemblyVersion>
-    <FileVersion>2.0.3.0</FileVersion>
-    <InformationalVersion>2.0.3</InformationalVersion>
+    <Version>2.0.6</Version>
+    <AssemblyVersion>2.0.6.0</AssemblyVersion>
+    <FileVersion>2.0.6.0</FileVersion>
+    <InformationalVersion>2.0.6</InformationalVersion>
     <StartupObject>CopyFinder.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Technification\Logo\favicon\favicon.ico</ApplicationIcon>
@@ -24,13 +24,16 @@
 
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
+    <Content Remove="Tests\**;TestArtifacts\**;publish\**" />
+    <None Remove="Tests\**;TestArtifacts\**;publish\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="INSTALL.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Technification\Logo\favicon\favicon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Technification\Logo\logo-Master.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Technification\FileIcons\*.png" CopyToOutputDirectory="PreserveNewest" />
