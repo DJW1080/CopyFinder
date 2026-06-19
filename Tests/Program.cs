@@ -78,23 +78,8 @@ static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, str
 {
     Log($"ExecuteWithTimeoutAsync entered for {testName}");
 
-    using var cts = new CancellationTokenSource();
-
-    Log($"About to start Task.Run for {testName}");
-    Log($"About to invoke test() for {testName}");
-
-    var testTask = Task.Run(async () =>
-    {
-        Log($"Task.Run started for {testName}");
-
-        await test();
-
-        Log($"Task.Run completed for {testName}");
-    }, cts.Token);
-
-    Log($"Task.Run returned control for {testName}");
-
-    var timeoutTask = Task.Delay(timeout, cts.Token);
+    var testTask = test();
+    var timeoutTask = Task.Delay(timeout);
 
     var completed = await Task.WhenAny(testTask, timeoutTask);
 
@@ -103,7 +88,6 @@ static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, str
         throw new TimeoutException($"Test timed out after {timeout.TotalMinutes:N0} minute(s): {testName}");
     }
 
-    cts.Cancel();
     await testTask;
 }
 
