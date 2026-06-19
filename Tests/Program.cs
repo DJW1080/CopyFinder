@@ -13,8 +13,9 @@ var tests = new (string Name, Func<Task> Test)[]
     ("scanner stress keeps duplicate limit bounded", ScannerStressKeepsDuplicateLimitBounded),
     ("publish script removes pdb files before zip", PublishScriptRemovesPdbFilesBeforeZip),
     ("project excludes generated release content", ProjectExcludesGeneratedReleaseContent),
-    ("version stamp is 2.0.6", VersionStampIsTwoPointZeroSix),
+    ("version stamp is 2.0.7", VersionStampIsTwoPointZeroSeven),
     ("install instructions cover deployment steps", InstallInstructionsCoverDeploymentSteps),
+    ("github workflow builds and publishes standalone zip", GitHubWorkflowBuildsAndPublishesStandaloneZip),
     ("technification assets are complete", TechnificationAssetsAreComplete),
     ("report formatter exports csv and json", ReportFormatterExportsCsvAndJson),
     ("delete validator accepts unchanged duplicate", DeleteValidatorAcceptsUnchangedDuplicate),
@@ -185,7 +186,7 @@ static Task ProjectExcludesGeneratedReleaseContent()
     return Task.CompletedTask;
 }
 
-static Task VersionStampIsTwoPointZeroSix()
+static Task VersionStampIsTwoPointZeroSeven()
 {
     var workspace = FindWorkspaceRoot();
     var project = File.ReadAllText(Path.Combine(workspace, "CopyFinder.csproj"));
@@ -194,14 +195,14 @@ static Task VersionStampIsTwoPointZeroSix()
     var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
     var install = File.ReadAllText(Path.Combine(workspace, "INSTALL.md"));
 
-    AssertContains("<Version>2.0.6</Version>", project);
-    AssertContains("<AssemblyVersion>2.0.6.0</AssemblyVersion>", project);
-    AssertContains("<FileVersion>2.0.6.0</FileVersion>", project);
-    AssertContains("<InformationalVersion>2.0.6</InformationalVersion>", project);
-    AssertContains("assemblyIdentity version=\"2.0.6.0\"", manifest);
-    AssertContains("Text=\"2.0.6\"", mainWindow);
-    AssertContains("Version: 2.0.6", readme);
-    AssertContains("Version: 2.0.6", install);
+    AssertContains("<Version>2.0.7</Version>", project);
+    AssertContains("<AssemblyVersion>2.0.7.0</AssemblyVersion>", project);
+    AssertContains("<FileVersion>2.0.7.0</FileVersion>", project);
+    AssertContains("<InformationalVersion>2.0.7</InformationalVersion>", project);
+    AssertContains("assemblyIdentity version=\"2.0.7.0\"", manifest);
+    AssertContains("Text=\"2.0.7\"", mainWindow);
+    AssertContains("Version: 2.0.7", readme);
+    AssertContains("Version: 2.0.7", install);
 
     return Task.CompletedTask;
 }
@@ -213,8 +214,8 @@ static Task InstallInstructionsCoverDeploymentSteps()
     var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
     var repoLayout = File.ReadAllText(Path.Combine(workspace, "REPO_LAYOUT.md"));
 
-    AssertContains("CopyFinder-v2.0.6-win-x64-Standalone.zip", install);
-    AssertContains("CopyFinder-v2.0.6-win-x64-Standalone.zip.sha256.txt", install);
+    AssertContains("CopyFinder-v2.0.7-win-x64-Standalone.zip", install);
+    AssertContains("CopyFinder-v2.0.7-win-x64-Standalone.zip.sha256.txt", install);
     AssertContains("Get-FileHash -Algorithm SHA256", install);
     AssertContains("Expand-Archive", install);
     AssertContains("Add-MpPreference -ControlledFolderAccessAllowedApplications", install);
@@ -222,6 +223,29 @@ static Task InstallInstructionsCoverDeploymentSteps()
     AssertContains("%LOCALAPPDATA%\\CopyFinder\\Temp", install);
     AssertContains("INSTALL.md", readme);
     AssertContains("INSTALL.md", repoLayout);
+
+    return Task.CompletedTask;
+}
+
+static Task GitHubWorkflowBuildsAndPublishesStandaloneZip()
+{
+    var workspace = FindWorkspaceRoot();
+    var workflowPath = Path.Combine(workspace, ".github", "workflows", "copyfinder-windows-desktop.yml");
+    var workflow = File.ReadAllText(workflowPath);
+    var repoLayout = File.ReadAllText(Path.Combine(workspace, "REPO_LAYOUT.md"));
+
+    AssertContains("dotnet-version: 10.0.x", workflow);
+    AssertContains("Solution_Name: CopyFinder.sln", workflow);
+    AssertContains(@"Test_Project_Path: Tests\CopyFinder.Tests.csproj", workflow);
+    AssertContains(@"Publish_Script: .\publish.ps1", workflow);
+    AssertContains("matrix:", workflow);
+    AssertContains("configuration: [Debug, Release]", workflow);
+    AssertContains("dotnet build $env:Solution_Name", workflow);
+    AssertContains("dotnet run --project $env:Test_Project_Path", workflow);
+    AssertContains("& $env:Publish_Script -Configuration Release -Runtime $env:Runtime", workflow);
+    AssertContains("Get-FileHash -Algorithm SHA256", workflow);
+    AssertContains("actions/upload-artifact@v4", workflow);
+    AssertContains("copyfinder-windows-desktop.yml", repoLayout);
 
     return Task.CompletedTask;
 }

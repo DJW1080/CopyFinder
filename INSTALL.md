@@ -1,6 +1,6 @@
 # CopyFinder Install Instructions
 
-Version: 2.0.6
+Version: 2.0.7
 
 CopyFinder is published as an unpackaged, standalone Windows desktop app. There is no MSI installer in this release. Install by extracting the release zip to a stable local folder and running `CopyFinder.exe`.
 
@@ -18,8 +18,8 @@ The release is self-contained and includes the runtime files it needs.
 Download both files from the release:
 
 ```text
-CopyFinder-v2.0.6-win-x64-Standalone.zip
-CopyFinder-v2.0.6-win-x64-Standalone.zip.sha256.txt
+CopyFinder-v2.0.7-win-x64-Standalone.zip
+CopyFinder-v2.0.7-win-x64-Standalone.zip.sha256.txt
 ```
 
 ## Verify The Zip
@@ -27,8 +27,8 @@ CopyFinder-v2.0.6-win-x64-Standalone.zip.sha256.txt
 Run this from the folder containing the downloaded files:
 
 ```powershell
-$zip = ".\CopyFinder-v2.0.6-win-x64-Standalone.zip"
-$expected = (Get-Content ".\CopyFinder-v2.0.6-win-x64-Standalone.zip.sha256.txt").Split(" ")[0]
+$zip = ".\CopyFinder-v2.0.7-win-x64-Standalone.zip"
+$expected = (Get-Content ".\CopyFinder-v2.0.7-win-x64-Standalone.zip.sha256.txt").Split(" ")[0]
 $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
 if ($actual -ne $expected) { throw "Checksum mismatch. Expected $expected but got $actual." }
 "Checksum OK: $actual"
@@ -47,7 +47,7 @@ New-Item -ItemType Directory -Force -Path "C:\Tools\CopyFinder" | Out-Null
 2. Extract the zip into that folder:
 
 ```powershell
-Expand-Archive -LiteralPath ".\CopyFinder-v2.0.6-win-x64-Standalone.zip" -DestinationPath "C:\Tools\CopyFinder" -Force
+Expand-Archive -LiteralPath ".\CopyFinder-v2.0.7-win-x64-Standalone.zip" -DestinationPath "C:\Tools\CopyFinder" -Force
 ```
 
 3. Run the app:

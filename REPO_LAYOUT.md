@@ -14,6 +14,7 @@ CopyFinder/
 |-- MainWindow.xaml
 |-- MainWindow.xaml.cs
 |-- app.manifest
+|-- .github/
 |-- publish.ps1
 |-- INSTALL.md
 |-- README.md
@@ -37,6 +38,7 @@ CopyFinder/
 | `MainWindow.xaml` | Main app shell and review UI layout. |
 | `MainWindow.xaml.cs` | UI event handling, scan orchestration, export flow, delete flow, and state wiring. |
 | `app.manifest` | Desktop app manifest settings including app identity version and DPI awareness. |
+| `.github\workflows\copyfinder-windows-desktop.yml` | GitHub Actions workflow for Windows restore, build, regression harness, publish, checksum verification, and artifact upload. |
 | `publish.ps1` | Release script that creates `publish\CopyFinder-Standalone` and a standalone zip. |
 | `INSTALL.md` | End-user install, update, uninstall, checksum, CFA, OneDrive, and enterprise deployment notes. |
 | `README.md` | User-facing overview, build, test, run, and publish commands. |

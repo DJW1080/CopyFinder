@@ -1,0 +1,96 @@
+name: CopyFinder Windows Desktop
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  Solution_Name: CopyFinder.sln
+  Project_Path: CopyFinder.csproj
+  Test_Project_Path: Tests\CopyFinder.Tests.csproj
+  Publish_Script: .\publish.ps1
+  Runtime: win-x64
+
+jobs:
+  build-test-package:
+    name: Build and test (${{ matrix.configuration }})
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Show .NET environment
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore $env:Solution_Name
+
+      - name: Build
+        shell: pwsh
+        run: dotnet build $env:Solution_Name --configuration $env:Configuration --no-restore -v:minimal
+        env:
+          Configuration: ${{ matrix.configuration }}
+
+      - name: Run regression harness
+        shell: pwsh
+        run: dotnet run --project $env:Test_Project_Path --configuration $env:Configuration --no-restore
+        env:
+          Configuration: ${{ matrix.configuration }}
+
+      - name: Publish standalone zip
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: '& $env:Publish_Script -Configuration Release -Runtime $env:Runtime'
+
+      - name: Verify standalone zip checksum
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -LiteralPath .\publish -Filter "CopyFinder-v*-$env:Runtime-Standalone.zip" -File | Select-Object -First 1
+          if (-not $zip) {
+            throw "Standalone zip was not created."
+          }
+
+          $hashPath = "$($zip.FullName).sha256.txt"
+          if (-not (Test-Path -LiteralPath $hashPath)) {
+            throw "SHA-256 sidecar was not created: $hashPath"
+          }
+
+          $expected = (Get-Content -LiteralPath $hashPath).Split(" ")[0]
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip.FullName).Hash
+          if ($actual -ne $expected) {
+            throw "Checksum mismatch. Expected $expected but got $actual."
+          }
+
+          "Verified $($zip.Name): $actual"
+
+      - name: Upload standalone release zip
+        if: matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopyFinder-win-x64-Standalone
+          path: |
+            publish\CopyFinder-v*-win-x64-Standalone.zip
+            publish\CopyFinder-v*-win-x64-Standalone.zip.sha256.txt
+          if-no-files-found: error
