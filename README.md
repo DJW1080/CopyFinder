@@ -1,6 +1,6 @@
 # CopyFinder
 
-Version: 2.0.8
+Version: 2.0.9
 
 CopyFinder is a WinUI 3 desktop app for finding duplicate files in a selected directory.
 

@@ -9,11 +9,12 @@ var tests = new (string Name, Func<Task> Test)[]
     ("scanner skips junction folders by default", ScannerSkipsJunctionFoldersByDefault),
     ("scanner skips junction root by default", ScannerSkipsJunctionRootByDefault),
     ("scanner ignores invalid preferred folder", ScannerIgnoresInvalidPreferredFolder),
+    ("scanner uses bounded workflow fixture", ScannerUsesBoundedWorkflowFixture),
     ("scanner stops hashing current group after duplicate limit", ScannerStopsHashingCurrentGroupAfterDuplicateLimit),
     ("scanner stress keeps duplicate limit bounded", ScannerStressKeepsDuplicateLimitBounded),
     ("publish script removes pdb files before zip", PublishScriptRemovesPdbFilesBeforeZip),
     ("project excludes generated release content", ProjectExcludesGeneratedReleaseContent),
-    ("version stamp is 2.0.8", VersionStampIsTwoPointZeroEight),
+    ("version stamp is 2.0.9", VersionStampIsTwoPointZeroNine),
     ("install instructions cover deployment steps", InstallInstructionsCoverDeploymentSteps),
     ("github workflow builds and publishes standalone zip", GitHubWorkflowBuildsAndPublishesStandaloneZip),
     ("technification assets are complete", TechnificationAssetsAreComplete),
@@ -186,7 +187,7 @@ static Task ProjectExcludesGeneratedReleaseContent()
     return Task.CompletedTask;
 }
 
-static Task VersionStampIsTwoPointZeroEight()
+static Task VersionStampIsTwoPointZeroNine()
 {
     var workspace = FindWorkspaceRoot();
     var project = File.ReadAllText(Path.Combine(workspace, "CopyFinder.csproj"));
@@ -195,14 +196,14 @@ static Task VersionStampIsTwoPointZeroEight()
     var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
     var install = File.ReadAllText(Path.Combine(workspace, "INSTALL.md"));
 
-    AssertContains("<Version>2.0.8</Version>", project);
-    AssertContains("<AssemblyVersion>2.0.8.0</AssemblyVersion>", project);
-    AssertContains("<FileVersion>2.0.8.0</FileVersion>", project);
-    AssertContains("<InformationalVersion>2.0.8</InformationalVersion>", project);
-    AssertContains("assemblyIdentity version=\"2.0.8.0\"", manifest);
-    AssertContains("Text=\"2.0.8\"", mainWindow);
-    AssertContains("Version: 2.0.8", readme);
-    AssertContains("Version: 2.0.8", install);
+    AssertContains("<Version>2.0.9</Version>", project);
+    AssertContains("<AssemblyVersion>2.0.9.0</AssemblyVersion>", project);
+    AssertContains("<FileVersion>2.0.9.0</FileVersion>", project);
+    AssertContains("<InformationalVersion>2.0.9</InformationalVersion>", project);
+    AssertContains("assemblyIdentity version=\"2.0.9.0\"", manifest);
+    AssertContains("Text=\"2.0.9\"", mainWindow);
+    AssertContains("Version: 2.0.9", readme);
+    AssertContains("Version: 2.0.9", install);
 
     return Task.CompletedTask;
 }
@@ -214,8 +215,8 @@ static Task InstallInstructionsCoverDeploymentSteps()
     var readme = File.ReadAllText(Path.Combine(workspace, "README.md"));
     var repoLayout = File.ReadAllText(Path.Combine(workspace, "REPO_LAYOUT.md"));
 
-    AssertContains("CopyFinder-v2.0.8-win-x64-Standalone.zip", install);
-    AssertContains("CopyFinder-v2.0.8-win-x64-Standalone.zip.sha256.txt", install);
+    AssertContains("CopyFinder-v2.0.9-win-x64-Standalone.zip", install);
+    AssertContains("CopyFinder-v2.0.9-win-x64-Standalone.zip.sha256.txt", install);
     AssertContains("Get-FileHash -Algorithm SHA256", install);
     AssertContains("Expand-Archive", install);
     AssertContains("Add-MpPreference -ControlledFolderAccessAllowedApplications", install);
@@ -241,6 +242,10 @@ static Task GitHubWorkflowBuildsAndPublishesStandaloneZip()
     AssertContains(@"Publish_Script: .\publish.ps1", workflow);
     AssertContains("Configuration: Release", workflow);
     AssertContains("timeout-minutes: 60", workflow);
+    AssertContains("Create bounded scan fixture", workflow);
+    AssertContains("COPYFINDER_WORKFLOW_SCAN_ROOT", workflow);
+    AssertContains("CopyFinderScanFixture", workflow);
+    AssertContains("bounded duplicate content", workflow);
     AssertFalse(workflow.Contains("matrix:", StringComparison.OrdinalIgnoreCase), "Workflow should not use a Debug/Release matrix.");
     AssertFalse(workflow.Contains("configuration: [Debug, Release]", StringComparison.OrdinalIgnoreCase), "Workflow should only run the Release configuration.");
     AssertContains("dotnet build $env:Solution_Name", workflow);
@@ -451,6 +456,55 @@ static async Task ScannerIgnoresInvalidPreferredFolder()
     }
 }
 
+static async Task ScannerUsesBoundedWorkflowFixture()
+{
+    var envFixtureRoot = Environment.GetEnvironmentVariable("COPYFINDER_WORKFLOW_SCAN_ROOT");
+    string fixtureRoot;
+    string? localArtifactRoot = null;
+
+    if (string.IsNullOrWhiteSpace(envFixtureRoot))
+    {
+        localArtifactRoot = CreateArtifactRoot();
+        fixtureRoot = Path.Combine(localArtifactRoot, "CopyFinderScanFixture");
+        await CreateBoundedScanFixtureAsync(fixtureRoot);
+    }
+    else
+    {
+        fixtureRoot = Path.GetFullPath(envFixtureRoot);
+        AssertTrue(Directory.Exists(fixtureRoot), $"Workflow scan fixture does not exist: {fixtureRoot}");
+    }
+
+    AssertSafeWorkflowFixtureRoot(fixtureRoot);
+
+    try
+    {
+        var scanner = new DuplicateScanner();
+        var result = await scanner.FindDuplicatesAsync(
+            fixtureRoot,
+            new ScanOptions
+            {
+                MaxDuplicateFiles = 10,
+                SkipHiddenFiles = false,
+                SkipSystemFiles = false
+            },
+            progress: null,
+            CancellationToken.None);
+
+        AssertEqual(2, result.Files.Count, "Workflow fixture scan should return one kept file and one duplicate.");
+        AssertEqual(1, result.DuplicateFileCount, "Workflow fixture should contain exactly one duplicate file.");
+        AssertFalse(result.LimitReached, "Workflow fixture scan should not hit the duplicate limit.");
+        AssertTrue(result.Files.All(file => file.Path.Contains("duplicate-", StringComparison.OrdinalIgnoreCase)), "Workflow fixture scan should only return the duplicate pair.");
+        AssertTrue(result.Files.Select(file => file.Hash).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1, "Workflow fixture duplicate pair should share one hash.");
+    }
+    finally
+    {
+        if (localArtifactRoot is not null)
+        {
+            DeleteTestDirectory(localArtifactRoot);
+        }
+    }
+}
+
 static async Task DeleteValidatorRejectsChangedDuplicate()
 {
     var artifactRoot = CreateArtifactRoot();
@@ -626,6 +680,45 @@ static string CreateArtifactRoot()
     var path = Path.Combine(FindWorkspaceRoot(), "TestArtifacts", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(path);
     return path;
+}
+
+static async Task CreateBoundedScanFixtureAsync(string fixtureRoot)
+{
+    Directory.CreateDirectory(Path.Combine(fixtureRoot, "A"));
+    Directory.CreateDirectory(Path.Combine(fixtureRoot, "B"));
+    Directory.CreateDirectory(Path.Combine(fixtureRoot, "Unique"));
+
+    await File.WriteAllTextAsync(Path.Combine(fixtureRoot, "A", "duplicate-a.txt"), "bounded duplicate content");
+    await File.WriteAllTextAsync(Path.Combine(fixtureRoot, "B", "duplicate-b.txt"), "bounded duplicate content");
+    await File.WriteAllTextAsync(Path.Combine(fixtureRoot, "Unique", "unique.txt"), "unique workflow content");
+}
+
+static void AssertSafeWorkflowFixtureRoot(string fixtureRoot)
+{
+    var fullRoot = Path.GetFullPath(fixtureRoot)
+        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    AssertEqual("CopyFinderScanFixture", Path.GetFileName(fullRoot), "Workflow scan fixture must use the expected bounded folder name.");
+
+    if (string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase))
+    {
+        var runnerTemp = Environment.GetEnvironmentVariable("RUNNER_TEMP");
+        if (string.IsNullOrWhiteSpace(runnerTemp))
+        {
+            throw new InvalidOperationException("RUNNER_TEMP must be set in GitHub Actions.");
+        }
+
+        var fullRunnerTemp = Path.GetFullPath(runnerTemp)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        AssertTrue(
+            fullRoot.StartsWith(fullRunnerTemp + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase),
+            $"Workflow scan fixture must stay under RUNNER_TEMP. Fixture={fullRoot}; RUNNER_TEMP={fullRunnerTemp}");
+    }
+
+    var fileCount = Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories).Count();
+    var directoryCount = Directory.EnumerateDirectories(fullRoot, "*", SearchOption.AllDirectories).Count();
+    AssertTrue(fileCount <= 10, $"Workflow scan fixture is too large: {fileCount} files.");
+    AssertTrue(directoryCount <= 10, $"Workflow scan fixture has too many directories: {directoryCount} directories.");
 }
 
 static void CreateJunction(string junctionPath, string targetPath)

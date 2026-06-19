@@ -1,4 +1,4 @@
-name: CopyFinder Windows Desktop
+name: CopyFinder Windows Desktop (Optimized)
 
 on:
   push:
@@ -46,6 +46,25 @@ jobs:
       - name: Build (Release)
         shell: pwsh
         run: dotnet build $env:Solution_Name --configuration $env:Configuration --no-restore -v:minimal
+
+      - name: Create bounded scan fixture
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP "CopyFinderScanFixture"
+          if (Test-Path -LiteralPath $fixtureRoot) {
+            Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "A") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "B") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "Unique") | Out-Null
+
+          "bounded duplicate content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "A\duplicate-a.txt") -Encoding UTF8
+          "bounded duplicate content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "B\duplicate-b.txt") -Encoding UTF8
+          "unique workflow content" | Set-Content -LiteralPath (Join-Path $fixtureRoot "Unique\unique.txt") -Encoding UTF8
+
+          "COPYFINDER_WORKFLOW_SCAN_ROOT=$fixtureRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "Created bounded CopyFinder scan fixture at $fixtureRoot"
 
       - name: Run regression harness
         shell: pwsh
