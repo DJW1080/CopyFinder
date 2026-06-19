@@ -37,6 +37,7 @@ var failures = new List<string>();
 LogBanner("CopyFinder regression harness starting");
 LogEnvironment();
 
+
 foreach (var (name, test) in tests)
 {
     var testStopwatch = Stopwatch.StartNew();
@@ -44,7 +45,12 @@ foreach (var (name, test) in tests)
 
     try
     {
+        Log($"BEFORE ExecuteWithTimeoutAsync: {name}");
+
         await ExecuteWithTimeoutAsync(test, TimeSpan.FromMinutes(PerTestTimeoutMinutes), name);
+
+        Log($"AFTER ExecuteWithTimeoutAsync: {name}");
+
         testStopwatch.Stop();
         Log($"PASS {name} ({testStopwatch.Elapsed.TotalSeconds:N2}s)");
     }
@@ -71,7 +77,8 @@ Log($"All tests passed in {harnessStopwatch.Elapsed.TotalSeconds:N2}s.");
 static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, string testName)
 {
     using var cts = new CancellationTokenSource();
-    var testTask = test();
+
+    var testTask = Task.Run(async () => await test(), cts.Token);
     var timeoutTask = Task.Delay(timeout, cts.Token);
 
     var completed = await Task.WhenAny(testTask, timeoutTask);
