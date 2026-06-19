@@ -1,8 +1,10 @@
 using System.Diagnostics;
-using CopyFinder.Models;
-using CopyFinder.Services;
 using System.Security.Cryptography;
 using System.Text.Json;
+using CopyFinder.Models;
+using CopyFinder.Services;
+
+const int PerTestTimeoutMinutes = 2;
 
 var tests = new (string Name, Func<Task> Test)[]
 {
@@ -29,34 +31,93 @@ var tests = new (string Name, Func<Task> Test)[]
     ("compatibility report includes CFA allow path", CompatibilityReportIncludesCfaAllowPath)
 };
 
+var harnessStopwatch = Stopwatch.StartNew();
 var failures = new List<string>();
+
+LogBanner("CopyFinder regression harness starting");
+LogEnvironment();
+
 foreach (var (name, test) in tests)
 {
+    var testStopwatch = Stopwatch.StartNew();
+    Log($"START {name}");
+
     try
     {
-        await test();
-        Console.WriteLine($"PASS {name}");
+        await ExecuteWithTimeoutAsync(test, TimeSpan.FromMinutes(PerTestTimeoutMinutes), name);
+        testStopwatch.Stop();
+        Log($"PASS {name} ({testStopwatch.Elapsed.TotalSeconds:N2}s)");
     }
     catch (Exception ex)
     {
+        testStopwatch.Stop();
         failures.Add($"{name}: {ex.Message}");
-        Console.WriteLine($"FAIL {name}");
-        Console.WriteLine(ex);
+        Log($"FAIL {name} ({testStopwatch.Elapsed.TotalSeconds:N2}s)");
+        Log(ex.ToString());
     }
 }
 
+harnessStopwatch.Stop();
+
 if (failures.Count > 0)
 {
-    Console.WriteLine();
-    Console.WriteLine($"{failures.Count} test(s) failed.");
+    Log(string.Empty);
+    Log($"{failures.Count} test(s) failed after {harnessStopwatch.Elapsed.TotalSeconds:N2}s total.");
     Environment.Exit(1);
 }
 
-Console.WriteLine("All tests passed.");
+Log($"All tests passed in {harnessStopwatch.Elapsed.TotalSeconds:N2}s.");
+
+static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, string testName)
+{
+    using var cts = new CancellationTokenSource();
+    var testTask = test();
+    var timeoutTask = Task.Delay(timeout, cts.Token);
+
+    var completed = await Task.WhenAny(testTask, timeoutTask);
+    if (completed == timeoutTask)
+    {
+        throw new TimeoutException($"Test timed out after {timeout.TotalMinutes:N0} minute(s): {testName}");
+    }
+
+    cts.Cancel();
+    await testTask;
+}
+
+static void LogBanner(string message)
+{
+    Console.WriteLine(new string('=', 80));
+    Console.WriteLine(message);
+    Console.WriteLine(new string('=', 80));
+    Console.Out.Flush();
+}
+
+static void Log(string message)
+{
+    Console.WriteLine($"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}] {message}");
+    Console.Out.Flush();
+}
+
+static void LogEnvironment()
+{
+    Log($"AppContext.BaseDirectory = {AppContext.BaseDirectory}");
+    Log($"CurrentDirectory = {Environment.CurrentDirectory}");
+    Log($"OSVersion = {Environment.OSVersion}");
+    Log($"ProcessPath = {Environment.ProcessPath ?? "(null)"}");
+    Log($"GITHUB_ACTIONS = {Environment.GetEnvironmentVariable("GITHUB_ACTIONS") ?? "(null)"}");
+    Log($"CI = {Environment.GetEnvironmentVariable("CI") ?? "(null)"}");
+    Log($"RUNNER_TEMP = {Environment.GetEnvironmentVariable("RUNNER_TEMP") ?? "(null)"}");
+    Log($"COPYFINDER_WORKFLOW_SCAN_ROOT = {Environment.GetEnvironmentVariable("COPYFINDER_WORKFLOW_SCAN_ROOT") ?? "(null)"}");
+    Log($"OneDriveConsumer = {Environment.GetEnvironmentVariable("OneDriveConsumer") ?? "(null)"}");
+}
 
 static async Task ScannerSkipsJunctionFoldersByDefault()
 {
+    Log("  [diag] ScannerSkipsJunctionFoldersByDefault entered");
+
     var workspace = FindWorkspaceRoot();
+    Log($"  [diag] workspace = {workspace}");
+
     var artifactRoot = Path.Combine(workspace, "TestArtifacts", Guid.NewGuid().ToString("N"));
     var scanRoot = Path.Combine(artifactRoot, "scan-root");
     var outsideRoot = Path.Combine(artifactRoot, "outside-target");
@@ -65,14 +126,31 @@ static async Task ScannerSkipsJunctionFoldersByDefault()
     Directory.CreateDirectory(scanRoot);
     Directory.CreateDirectory(outsideRoot);
 
+    Log($"  [diag] artifactRoot = {artifactRoot}");
+    Log($"  [diag] scanRoot = {scanRoot}");
+    Log($"  [diag] outsideRoot = {outsideRoot}");
+    Log($"  [diag] junctionPath = {junctionPath}");
+
     try
     {
         await File.WriteAllTextAsync(Path.Combine(scanRoot, "unique.txt"), "inside");
         await File.WriteAllTextAsync(Path.Combine(outsideRoot, "a.txt"), "same duplicate content");
         await File.WriteAllTextAsync(Path.Combine(outsideRoot, "b.txt"), "same duplicate content");
+        Log("  [diag] test files created");
+
         CreateJunction(junctionPath, outsideRoot);
+        Log("  [diag] junction created successfully");
 
         var scanner = new DuplicateScanner();
+        Log("  [diag] starting FindDuplicatesAsync for junction-folder test");
+
+        var progress = new DelegateProgress<ScanProgress>(message =>
+        {
+            Log($"  [scan] {message.Message}");
+        });
+
+        var scanStopwatch = Stopwatch.StartNew();
+
         var result = await scanner.FindDuplicatesAsync(
             scanRoot,
             new ScanOptions
@@ -81,20 +159,32 @@ static async Task ScannerSkipsJunctionFoldersByDefault()
                 SkipHiddenFiles = false,
                 SkipSystemFiles = false
             },
-            progress: null,
+            progress,
             CancellationToken.None);
+
+        scanStopwatch.Stop();
+        Log($"  [diag] FindDuplicatesAsync returned in {scanStopwatch.Elapsed.TotalSeconds:N2}s");
+        Log($"  [diag] result.Files.Count = {result.Files.Count}");
+        Log($"  [diag] result.DuplicateFileCount = {result.DuplicateFileCount}");
+        Log($"  [diag] result.LimitReached = {result.LimitReached}");
 
         AssertEqual(0, result.Files.Count, "Junction target files should not be included in scan results.");
     }
     finally
     {
+        Log("  [diag] cleaning up junction-folder test artifacts");
         DeleteTestDirectory(artifactRoot);
+        Log("  [diag] cleanup complete");
     }
 }
 
 static async Task ScannerSkipsJunctionRootByDefault()
 {
+    Log("  [diag] ScannerSkipsJunctionRootByDefault entered");
+
     var workspace = FindWorkspaceRoot();
+    Log($"  [diag] workspace = {workspace}");
+
     var artifactRoot = Path.Combine(workspace, "TestArtifacts", Guid.NewGuid().ToString("N"));
     var outsideRoot = Path.Combine(artifactRoot, "outside-target");
     var junctionRoot = Path.Combine(artifactRoot, "scan-root-link");
@@ -102,13 +192,29 @@ static async Task ScannerSkipsJunctionRootByDefault()
     Directory.CreateDirectory(artifactRoot);
     Directory.CreateDirectory(outsideRoot);
 
+    Log($"  [diag] artifactRoot = {artifactRoot}");
+    Log($"  [diag] outsideRoot = {outsideRoot}");
+    Log($"  [diag] junctionRoot = {junctionRoot}");
+
     try
     {
         await File.WriteAllTextAsync(Path.Combine(outsideRoot, "a.txt"), "same duplicate content");
         await File.WriteAllTextAsync(Path.Combine(outsideRoot, "b.txt"), "same duplicate content");
+        Log("  [diag] outside files created");
+
         CreateJunction(junctionRoot, outsideRoot);
+        Log("  [diag] root junction created successfully");
 
         var scanner = new DuplicateScanner();
+        Log("  [diag] starting FindDuplicatesAsync for junction-root test");
+
+        var progress = new DelegateProgress<ScanProgress>(message =>
+        {
+            Log($"  [scan] {message.Message}");
+        });
+
+        var scanStopwatch = Stopwatch.StartNew();
+
         var result = await scanner.FindDuplicatesAsync(
             junctionRoot,
             new ScanOptions
@@ -117,24 +223,34 @@ static async Task ScannerSkipsJunctionRootByDefault()
                 SkipHiddenFiles = false,
                 SkipSystemFiles = false
             },
-            progress: null,
+            progress,
             CancellationToken.None);
+
+        scanStopwatch.Stop();
+        Log($"  [diag] FindDuplicatesAsync returned in {scanStopwatch.Elapsed.TotalSeconds:N2}s");
+        Log($"  [diag] result.Files.Count = {result.Files.Count}");
+        Log($"  [diag] result.DuplicateFileCount = {result.DuplicateFileCount}");
+        Log($"  [diag] result.LimitReached = {result.LimitReached}");
 
         AssertEqual(0, result.Files.Count, "A linked scan root should not include target files by default.");
     }
     finally
     {
+        Log("  [diag] cleaning up junction-root test artifacts");
         DeleteTestDirectory(artifactRoot);
+        Log("  [diag] cleanup complete");
     }
 }
 
 static async Task DeleteValidatorAcceptsUnchangedDuplicate()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         var keepPath = Path.Combine(artifactRoot, "keep.txt");
         var duplicatePath = Path.Combine(artifactRoot, "duplicate.txt");
+
         await File.WriteAllTextAsync(keepPath, "same duplicate content");
         await File.WriteAllTextAsync(duplicatePath, "same duplicate content");
 
@@ -147,7 +263,6 @@ static async Task DeleteValidatorAcceptsUnchangedDuplicate()
             ExpectedHash: expectedHash);
 
         var result = await DuplicateDeleteValidator.ValidateAsync(candidate, CancellationToken.None);
-
         AssertTrue(result.CanDelete, result.FailureMessage ?? "Expected duplicate to be eligible for deletion.");
     }
     finally
@@ -160,6 +275,7 @@ static Task PublishScriptRemovesPdbFilesBeforeZip()
 {
     var scriptPath = Path.Combine(FindWorkspaceRoot(), "publish.ps1");
     var script = File.ReadAllText(scriptPath);
+
     var removePdbIndex = script.IndexOf("-Filter '*.pdb'", StringComparison.OrdinalIgnoreCase);
     var zipIndex = script.IndexOf("Compress-Archive", StringComparison.OrdinalIgnoreCase);
     var hashIndex = script.IndexOf("Get-FileHash -Algorithm SHA256", StringComparison.OrdinalIgnoreCase);
@@ -231,31 +347,84 @@ static Task InstallInstructionsCoverDeploymentSteps()
 static Task GitHubWorkflowBuildsAndPublishesStandaloneZip()
 {
     var workspace = FindWorkspaceRoot();
-    var workflowPath = Path.Combine(workspace, ".github", "workflows", "copyfinder-windows-desktop.yml");
-    var workflow = File.ReadAllText(workflowPath);
-    var repoLayout = File.ReadAllText(Path.Combine(workspace, "REPO_LAYOUT.md"));
 
+    var workflowPath = Path.Combine(
+        workspace,
+        ".github",
+        "workflows",
+        "copyfinder-windows-desktop.yml");
+
+    var workflow = File.ReadAllText(workflowPath);
+    var repoLayout = File.ReadAllText(
+        Path.Combine(workspace, "REPO_LAYOUT.md"));
+
+    // Workflow identity
+    AssertContains("CopyFinder Windows Desktop", workflow);
+
+    // SDK
     AssertContains("dotnet-version: 10.0.x", workflow);
-    AssertContains("name: CopyFinder Windows Desktop (Optimized)", workflow);
+
+    // Environment variables
     AssertContains("Solution_Name: CopyFinder.sln", workflow);
     AssertContains(@"Test_Project_Path: Tests\CopyFinder.Tests.csproj", workflow);
     AssertContains(@"Publish_Script: .\publish.ps1", workflow);
     AssertContains("Configuration: Release", workflow);
+    AssertContains("Runtime: win-x64", workflow);
+
+    // Job timeout
     AssertContains("timeout-minutes: 60", workflow);
+
+    // Build pipeline
+    AssertContains("Restore dependencies", workflow);
+    AssertContains("Build solution (Release)", workflow);
+    AssertContains("dotnet build $env:Solution_Name", workflow);
+
+    // Bounded fixture
     AssertContains("Create bounded scan fixture", workflow);
     AssertContains("COPYFINDER_WORKFLOW_SCAN_ROOT", workflow);
     AssertContains("CopyFinderScanFixture", workflow);
     AssertContains("bounded duplicate content", workflow);
-    AssertFalse(workflow.Contains("matrix:", StringComparison.OrdinalIgnoreCase), "Workflow should not use a Debug/Release matrix.");
-    AssertFalse(workflow.Contains("configuration: [Debug, Release]", StringComparison.OrdinalIgnoreCase), "Workflow should only run the Release configuration.");
-    AssertContains("dotnet build $env:Solution_Name", workflow);
+    AssertContains("unique workflow content", workflow);
+
+    // Diagnostic fixture visibility
+    AssertContains("Show test fixture contents", workflow);
+
+    // Regression harness
+    AssertContains("Run regression harness", workflow);
     AssertContains("dotnet run --project $env:Test_Project_Path", workflow);
+    AssertContains("--no-build", workflow);
+    AssertContains("timeout-minutes: 5", workflow);
+
+    // Publish
+    AssertContains("Publish standalone zip", workflow);
     AssertContains("& $env:Publish_Script -Configuration Release -Runtime $env:Runtime", workflow);
+
+    // Checksum validation
+    AssertContains("Verify standalone zip checksum", workflow);
     AssertContains("Get-FileHash -Algorithm SHA256", workflow);
+
+    // Artifact upload support
     AssertContains("actions/upload-artifact@v4", workflow);
+
+    // Release artifacts
+    AssertContains("Upload standalone release zip", workflow);
     AssertContains("name: CopyFinder-Standalone", workflow);
+    AssertContains("publish/*.zip", workflow);
     AssertContains("publish/*.zip.sha256.txt", workflow);
-    AssertContains("copyfinder-windows-desktop.yml", repoLayout);
+
+    // Ensure Release-only execution
+    AssertFalse(
+        workflow.Contains("matrix:", StringComparison.OrdinalIgnoreCase),
+        "Workflow should not use a Debug/Release matrix.");
+
+    AssertFalse(
+        workflow.Contains("configuration: [Debug, Release]", StringComparison.OrdinalIgnoreCase),
+        "Workflow should only run the Release configuration.");
+
+    // Repository documentation references
+    AssertContains(
+        "copyfinder-windows-desktop.yml",
+        repoLayout);
 
     return Task.CompletedTask;
 }
@@ -290,11 +459,12 @@ static Task ReportFormatterExportsCsvAndJson()
 
     var csv = DuplicateReportFormatter.BuildCsvReport(files);
     AssertContains("GroupId,Role,Selected,Size,Hash,ImageWidth,ImageHeight,Modified,NetworkPath,DeleteStatus,Path", csv);
-    AssertContains("\"C:\\Data\\keep,file.txt\"", csv);
-    AssertContains("True,\"Selected\",\"\\\\server\\share\\duplicate \"\"quoted\"\".txt\"", csv);
+    AssertContains(@"""C:\Data\keep,file.txt""", csv);
+    AssertContains(@"True,""Selected"",""\\server\share\duplicate """"quoted"""" .txt""".Replace(" .txt", ".txt"), csv);
 
     using var document = JsonDocument.Parse(DuplicateReportFormatter.BuildJsonReport(files));
     var rows = document.RootElement.EnumerateArray().ToList();
+
     AssertEqual(2, rows.Count, "JSON report should include both files.");
     AssertEqual("Kept", rows[0].GetProperty("DeleteStatus").GetString() ?? string.Empty, "Original file should be marked kept.");
     AssertFalse(rows[0].GetProperty("IsNetworkPath").GetBoolean(), "Local path should not be marked as network.");
@@ -344,6 +514,7 @@ static Task TechnificationAssetsAreComplete()
 static async Task ScannerStopsHashingCurrentGroupAfterDuplicateLimit()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         await File.WriteAllTextAsync(Path.Combine(artifactRoot, "a.txt"), "same duplicate content");
@@ -385,6 +556,7 @@ static async Task ScannerStopsHashingCurrentGroupAfterDuplicateLimit()
 static async Task ScannerStressKeepsDuplicateLimitBounded()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         for (var index = 0; index < 256; index++)
@@ -429,6 +601,7 @@ static async Task ScannerStressKeepsDuplicateLimitBounded()
 static async Task ScannerIgnoresInvalidPreferredFolder()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         await File.WriteAllTextAsync(Path.Combine(artifactRoot, "a.txt"), "same duplicate content");
@@ -458,12 +631,15 @@ static async Task ScannerIgnoresInvalidPreferredFolder()
 
 static async Task ScannerUsesBoundedWorkflowFixture()
 {
+    Log("  [diag] ScannerUsesBoundedWorkflowFixture entered");
+
     var envFixtureRoot = Environment.GetEnvironmentVariable("COPYFINDER_WORKFLOW_SCAN_ROOT");
     string fixtureRoot;
     string? localArtifactRoot = null;
 
     if (string.IsNullOrWhiteSpace(envFixtureRoot))
     {
+        Log("  [diag] no workflow fixture env var supplied; creating local fixture");
         localArtifactRoot = CreateArtifactRoot();
         fixtureRoot = Path.Combine(localArtifactRoot, "CopyFinderScanFixture");
         await CreateBoundedScanFixtureAsync(fixtureRoot);
@@ -471,14 +647,25 @@ static async Task ScannerUsesBoundedWorkflowFixture()
     else
     {
         fixtureRoot = Path.GetFullPath(envFixtureRoot);
+        Log($"  [diag] using workflow fixture from env: {fixtureRoot}");
         AssertTrue(Directory.Exists(fixtureRoot), $"Workflow scan fixture does not exist: {fixtureRoot}");
     }
 
     AssertSafeWorkflowFixtureRoot(fixtureRoot);
+    Log("  [diag] workflow fixture root passed safety checks");
 
     try
     {
         var scanner = new DuplicateScanner();
+        Log("  [diag] starting FindDuplicatesAsync for bounded workflow fixture");
+
+        var progress = new DelegateProgress<ScanProgress>(message =>
+        {
+            Log($"  [scan] {message.Message}");
+        });
+
+        var scanStopwatch = Stopwatch.StartNew();
+
         var result = await scanner.FindDuplicatesAsync(
             fixtureRoot,
             new ScanOptions
@@ -487,8 +674,19 @@ static async Task ScannerUsesBoundedWorkflowFixture()
                 SkipHiddenFiles = false,
                 SkipSystemFiles = false
             },
-            progress: null,
+            progress,
             CancellationToken.None);
+
+        scanStopwatch.Stop();
+        Log($"  [diag] FindDuplicatesAsync returned in {scanStopwatch.Elapsed.TotalSeconds:N2}s");
+        Log($"  [diag] result.Files.Count = {result.Files.Count}");
+        Log($"  [diag] result.DuplicateFileCount = {result.DuplicateFileCount}");
+        Log($"  [diag] result.LimitReached = {result.LimitReached}");
+
+        foreach (var file in result.Files)
+        {
+            Log($"  [diag] result file => {file.Path}");
+        }
 
         AssertEqual(2, result.Files.Count, "Workflow fixture scan should return one kept file and one duplicate.");
         AssertEqual(1, result.DuplicateFileCount, "Workflow fixture should contain exactly one duplicate file.");
@@ -500,7 +698,9 @@ static async Task ScannerUsesBoundedWorkflowFixture()
     {
         if (localArtifactRoot is not null)
         {
+            Log("  [diag] cleaning up local bounded fixture");
             DeleteTestDirectory(localArtifactRoot);
+            Log("  [diag] cleanup complete");
         }
     }
 }
@@ -508,10 +708,12 @@ static async Task ScannerUsesBoundedWorkflowFixture()
 static async Task DeleteValidatorRejectsChangedDuplicate()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         var keepPath = Path.Combine(artifactRoot, "keep.txt");
         var duplicatePath = Path.Combine(artifactRoot, "duplicate.txt");
+
         await File.WriteAllTextAsync(keepPath, "same duplicate content");
         await File.WriteAllTextAsync(duplicatePath, "same duplicate content");
 
@@ -526,7 +728,6 @@ static async Task DeleteValidatorRejectsChangedDuplicate()
         await File.WriteAllTextAsync(duplicatePath, "changed content");
 
         var result = await DuplicateDeleteValidator.ValidateAsync(candidate, CancellationToken.None);
-
         AssertFalse(result.CanDelete, "Changed duplicate should not be eligible for deletion.");
         AssertContains("changed", result.FailureMessage ?? string.Empty);
     }
@@ -539,6 +740,7 @@ static async Task DeleteValidatorRejectsChangedDuplicate()
 static async Task SafeFileHashesThroughWrapper()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         var filePath = Path.Combine(artifactRoot, "hash.txt");
@@ -558,13 +760,13 @@ static async Task SafeFileHashesThroughWrapper()
 static async Task SafeFileDeletesThroughWrapper()
 {
     var artifactRoot = CreateArtifactRoot();
+
     try
     {
         var filePath = Path.Combine(artifactRoot, "delete-me.txt");
         await File.WriteAllTextAsync(filePath, "delete through safe wrapper");
 
         var result = await SafeFile.DeleteAsync(filePath, allowPermissionRepair: false, CancellationToken.None);
-
         AssertTrue(result.Succeeded, result.Message ?? "SafeFile delete should succeed.");
         AssertFalse(File.Exists(filePath), "Deleted file should no longer exist at the original path.");
     }
@@ -578,11 +780,12 @@ static Task SafeFileWritesDeploymentLogToConfiguredPath()
 {
     var artifactRoot = CreateArtifactRoot();
     var logPath = Path.Combine(artifactRoot, "deployment.log");
+
     try
     {
         DeploymentLogger.UseLogPathForTests(logPath);
-        var wrote = DeploymentLogger.Log("Test", "SafeFile deployment logger test.");
 
+        var wrote = DeploymentLogger.Log("Test", "SafeFile deployment logger test.");
         AssertTrue(wrote, "Deployment logger should write to the configured test path.");
         AssertTrue(File.Exists(logPath), "Deployment log should exist.");
         AssertContains("SafeFile deployment logger test.", File.ReadAllText(logPath));
@@ -600,16 +803,21 @@ static async Task SafeFileDetectsConfiguredOneDriveRoot()
 {
     var artifactRoot = CreateArtifactRoot();
     var previousConsumer = Environment.GetEnvironmentVariable("OneDriveConsumer");
+
     try
     {
         Environment.SetEnvironmentVariable("OneDriveConsumer", artifactRoot);
+
         var filePath = Path.Combine(artifactRoot, "inside-onedrive.txt");
         await File.WriteAllTextAsync(filePath, "onedrive root test");
 
         var state = OneDriveFileHandler.GetState(filePath, checkInUse: false);
 
         AssertTrue(state.IsInsideOneDrive, "File should be recognized inside the configured OneDrive root.");
-        AssertEqual(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar), state.OneDriveRoot ?? string.Empty, "OneDrive root should match the configured environment path.");
+        AssertEqual(
+            Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar),
+            state.OneDriveRoot ?? string.Empty,
+            "OneDrive root should match the configured environment path.");
     }
     finally
     {
@@ -651,7 +859,6 @@ static Task CompatibilityReportIncludesCfaAllowPath()
         "Not installed.");
 
     var message = report.ToUserMessage();
-
     AssertContains(@"C:\Apps\CopyFinder\CopyFinder.exe", message);
     AssertContains(@"C:\ProgramData\CopyFinder\Logs\deployment.log", message);
     AssertContains("Controlled Folder Access: Enabled", message);
@@ -662,10 +869,14 @@ static Task CompatibilityReportIncludesCfaAllowPath()
 static string FindWorkspaceRoot()
 {
     var current = AppContext.BaseDirectory;
+    Log($"  [diag] FindWorkspaceRoot starting at {current}");
+
     while (!string.IsNullOrWhiteSpace(current))
     {
-        if (File.Exists(Path.Combine(current, "CopyFinder.csproj")))
+        var candidate = Path.Combine(current, "CopyFinder.csproj");
+        if (File.Exists(candidate))
         {
+            Log($"  [diag] FindWorkspaceRoot found {current}");
             return current;
         }
 
@@ -710,6 +921,7 @@ static void AssertSafeWorkflowFixtureRoot(string fixtureRoot)
 
         var fullRunnerTemp = Path.GetFullPath(runnerTemp)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
         AssertTrue(
             fullRoot.StartsWith(fullRunnerTemp + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase),
             $"Workflow scan fixture must stay under RUNNER_TEMP. Fixture={fullRoot}; RUNNER_TEMP={fullRunnerTemp}");
@@ -717,16 +929,24 @@ static void AssertSafeWorkflowFixtureRoot(string fixtureRoot)
 
     var fileCount = Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories).Count();
     var directoryCount = Directory.EnumerateDirectories(fullRoot, "*", SearchOption.AllDirectories).Count();
+
     AssertTrue(fileCount <= 10, $"Workflow scan fixture is too large: {fileCount} files.");
     AssertTrue(directoryCount <= 10, $"Workflow scan fixture has too many directories: {directoryCount} directories.");
 }
 
 static void CreateJunction(string junctionPath, string targetPath)
 {
-    var process = Process.Start(new ProcessStartInfo
+    Log("  [diag] CreateJunction requested");
+    Log($"  [diag] junctionPath = {junctionPath}");
+    Log($"  [diag] targetPath = {targetPath}");
+
+    var arguments = $"/c mklink /J \"{junctionPath}\" \"{targetPath}\"";
+    Log($"  [diag] cmd.exe {arguments}");
+
+    using var process = Process.Start(new ProcessStartInfo
     {
         FileName = "cmd.exe",
-        Arguments = $"/c mklink /J \"{junctionPath}\" \"{targetPath}\"",
+        Arguments = arguments,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
@@ -738,11 +958,37 @@ static void CreateJunction(string junctionPath, string targetPath)
         throw new InvalidOperationException("Could not start mklink process.");
     }
 
-    process.WaitForExit();
+    if (!process.WaitForExit(30000))
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            // ignore best-effort kill failures
+        }
+
+        throw new TimeoutException("mklink did not exit within 30 seconds.");
+    }
+
+    var output = process.StandardOutput.ReadToEnd();
+    var error = process.StandardError.ReadToEnd();
+
+    Log($"  [diag] mklink exit code = {process.ExitCode}");
+
+    if (!string.IsNullOrWhiteSpace(output))
+    {
+        Log($"  [diag] mklink stdout: {output.Trim()}");
+    }
+
+    if (!string.IsNullOrWhiteSpace(error))
+    {
+        Log($"  [diag] mklink stderr: {error.Trim()}");
+    }
+
     if (process.ExitCode != 0)
     {
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
         throw new InvalidOperationException($"mklink failed with exit code {process.ExitCode}: {output}{error}");
     }
 }
@@ -752,6 +998,10 @@ static void DeleteTestDirectory(string artifactRoot)
     var workspace = FindWorkspaceRoot();
     var fullArtifactRoot = Path.GetFullPath(artifactRoot);
     var allowedRoot = Path.GetFullPath(Path.Combine(workspace, "TestArtifacts"));
+
+    Log($"  [diag] DeleteTestDirectory requested for {fullArtifactRoot}");
+    Log($"  [diag] allowed root = {allowedRoot}");
+
     if (!fullArtifactRoot.StartsWith(allowedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
     {
         throw new InvalidOperationException($"Refusing to delete outside test artifacts: {fullArtifactRoot}");
@@ -764,10 +1014,16 @@ static void DeleteTestDirectory(string artifactRoot)
                      .Where(IsReparsePoint)
                      .OrderByDescending(path => path.Length))
         {
+            Log($"  [diag] deleting reparse point {reparsePoint}");
             Directory.Delete(reparsePoint);
         }
 
         Directory.Delete(fullArtifactRoot, recursive: true);
+        Log($"  [diag] deleted {fullArtifactRoot}");
+    }
+    else
+    {
+        Log($"  [diag] directory did not exist: {fullArtifactRoot}");
     }
 }
 
