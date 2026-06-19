@@ -16,16 +16,13 @@ env:
   Test_Project_Path: Tests\CopyFinder.Tests.csproj
   Publish_Script: .\publish.ps1
   Runtime: win-x64
+  Configuration: Release
 
 jobs:
-  build-test-package:
-    name: Build and test (${{ matrix.configuration }})
+  build-test-publish:
+    name: Build, Test, and Publish (Release)
     runs-on: windows-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        configuration: [Debug, Release]
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -46,25 +43,19 @@ jobs:
         shell: pwsh
         run: dotnet restore $env:Solution_Name
 
-      - name: Build
+      - name: Build (Release)
         shell: pwsh
         run: dotnet build $env:Solution_Name --configuration $env:Configuration --no-restore -v:minimal
-        env:
-          Configuration: ${{ matrix.configuration }}
 
       - name: Run regression harness
         shell: pwsh
         run: dotnet run --project $env:Test_Project_Path --configuration $env:Configuration --no-restore
-        env:
-          Configuration: ${{ matrix.configuration }}
 
       - name: Publish standalone zip
-        if: matrix.configuration == 'Release'
         shell: pwsh
         run: '& $env:Publish_Script -Configuration Release -Runtime $env:Runtime'
 
       - name: Verify standalone zip checksum
-        if: matrix.configuration == 'Release'
         shell: pwsh
         run: |
           $zip = Get-ChildItem -LiteralPath .\publish -Filter "CopyFinder-v*-$env:Runtime-Standalone.zip" -File | Select-Object -First 1
@@ -86,11 +77,10 @@ jobs:
           "Verified $($zip.Name): $actual"
 
       - name: Upload standalone release zip
-        if: matrix.configuration == 'Release'
         uses: actions/upload-artifact@v4
         with:
-          name: CopyFinder-win-x64-Standalone
+          name: CopyFinder-Standalone
           path: |
-            publish\CopyFinder-v*-win-x64-Standalone.zip
-            publish\CopyFinder-v*-win-x64-Standalone.zip.sha256.txt
+            publish/*.zip
+            publish/*.zip.sha256.txt
           if-no-files-found: error
