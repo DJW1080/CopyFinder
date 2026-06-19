@@ -76,12 +76,18 @@ Log($"All tests passed in {harnessStopwatch.Elapsed.TotalSeconds:N2}s.");
 
 static async Task ExecuteWithTimeoutAsync(Func<Task> test, TimeSpan timeout, string testName)
 {
+    Log($"ExecuteWithTimeoutAsync entered for {testName}");
+
     using var cts = new CancellationTokenSource();
 
+    Log($"About to start Task.Run for {testName}");
+
     var testTask = Task.Run(async () => await test(), cts.Token);
+
     var timeoutTask = Task.Delay(timeout, cts.Token);
 
     var completed = await Task.WhenAny(testTask, timeoutTask);
+
     if (completed == timeoutTask)
     {
         throw new TimeoutException($"Test timed out after {timeout.TotalMinutes:N0} minute(s): {testName}");
