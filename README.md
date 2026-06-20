@@ -9,7 +9,7 @@
 
 A WinUI 3 desktop app for finding duplicate files in a selected directory.
 
-![CopyFinder V2.1.0](/Technification/CopyFinder-01.png)
+![CopyFinder V2.1.0](/CopyFinder-01.png)
 
 ## 📜 Application Behaviour
 
