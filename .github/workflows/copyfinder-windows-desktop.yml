@@ -82,3 +82,4 @@ jobs:
           path: |
             publish/*.zip
             publish/*.zip.sha256.txt
+            
