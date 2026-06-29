@@ -4,10 +4,10 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
     <RootNamespace>CopyFinder</RootNamespace>
-    <Version>2.0.9</Version>
-    <AssemblyVersion>2.0.9.0</AssemblyVersion>
-    <FileVersion>2.0.9.0</FileVersion>
-    <InformationalVersion>2.0.9</InformationalVersion>
+    <Version>2.1.8</Version>
+    <AssemblyVersion>2.1.8.0</AssemblyVersion>
+    <FileVersion>2.1.8.0</FileVersion>
+    <InformationalVersion>2.1.8</InformationalVersion>
     <StartupObject>CopyFinder.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Technification\Logo\favicon\favicon.ico</ApplicationIcon>
@@ -33,9 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="INSTALL.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Technification\Logo\favicon\favicon.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Technification\Logo\logo-Master.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Technification\Logo\CopyFinder-Banner-08.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Technification\FileIcons\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

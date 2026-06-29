@@ -54,6 +54,7 @@
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="BorderBrush" Value="{StaticResource AppPrimaryPressedBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="4"/>
             </Style>
 
             <Style x:Key="BlueButtonStyle" TargetType="Button">
@@ -61,6 +62,7 @@
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="4"/>
             </Style>
 
             <Style x:Key="PrimaryActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
@@ -71,6 +73,7 @@
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="BorderBrush" Value="{StaticResource AppDangerPressedBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="4"/>
             </Style>
 
             <Style x:Key="TopButtonStyle" TargetType="Button" BasedOn="{StaticResource BlueButtonStyle}">

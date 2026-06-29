@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using CopyFinder.Models;
 using CopyFinder.Services;
@@ -14,6 +15,11 @@ namespace CopyFinder;
 
 public sealed partial class MainWindow : Window
 {
+    private const string ProductTitle = "Technification CopyFinder";
+    private const int InitialWindowWidth = 830;
+    private const int InitialWindowHeight = 800;
+    private const int DefaultDpi = 96;
+
     private readonly DuplicateScanner _scanner = new();
     private readonly SettingsService _settingsService = new();
     private AppSettings _settings;
@@ -25,6 +31,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SetWindowTitle();
+        SetInitialWindowSize();
         SetWindowIcon();
         _settings = _settingsService.Load();
         DuplicateGroups.CollectionChanged += DuplicateGroups_CollectionChanged;
@@ -743,6 +751,34 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    private void SetInitialWindowSize()
+    {
+        var rasterizationScale = GetWindowRasterizationScale();
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(
+            (int)Math.Round(InitialWindowWidth * rasterizationScale),
+            (int)Math.Round(InitialWindowHeight * rasterizationScale)));
+    }
+
+    private void SetWindowTitle()
+    {
+        Title = $"{ProductTitle} {GetAppVersion()}";
+    }
+
+    private double GetWindowRasterizationScale()
+    {
+        var windowHandle = WindowNative.GetWindowHandle(this);
+        if (windowHandle != IntPtr.Zero)
+        {
+            var dpi = GetDpiForWindow(windowHandle);
+            if (dpi > 0)
+            {
+                return dpi / (double)DefaultDpi;
+            }
+        }
+
+        return Content.XamlRoot?.RasterizationScale ?? 1d;
+    }
+
     private void SetWindowIcon()
     {
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Technification", "Logo", "favicon", "favicon.ico");
@@ -792,4 +828,7 @@ public sealed partial class MainWindow : Window
             ? "dev"
             : $"{version.Major}.{version.Minor}.{version.Build}";
     }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
 }

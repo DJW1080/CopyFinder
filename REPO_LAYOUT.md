@@ -16,6 +16,7 @@ CopyFinder/
 |-- app.manifest
 |-- .github/
 |-- publish.ps1
+|-- CHANGELOG.md
 |-- INSTALL.md
 |-- README.md
 |-- REPO_LAYOUT.md
@@ -40,6 +41,7 @@ CopyFinder/
 | `app.manifest` | Desktop app manifest settings including app identity version and DPI awareness. |
 | `.github\workflows\copyfinder-windows-desktop.yml` | GitHub Actions workflow for Windows restore, Release build, bounded duplicate-scan fixture creation, regression harness, publish, checksum verification, and artifact upload. |
 | `publish.ps1` | Release script that creates `publish\CopyFinder-Standalone` and a standalone zip. |
+| `CHANGELOG.md` | Manual release notes, changed-file summary, and current validation notes. |
 | `INSTALL.md` | End-user install, update, uninstall, checksum, CFA, OneDrive, and enterprise deployment notes. |
 | `README.md` | User-facing overview, build, test, run, and publish commands. |
 | `REPO_LAYOUT.md` | Repository map and source/generated artifact guidance. |
